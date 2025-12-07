@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-LLM 分析服務 (LLM Analyzer Service)
-負責構建 Prompt 並呼叫 LLM 生成投資日報。
+LLM ???? (LLM Analyzer Service)
+鞎痊瑽遣 Prompt 銝血??LLM ?????亙??
 """
 
 import json
@@ -11,35 +11,35 @@ from ..config import Config
 
 class LLMAnalyzerService:
     def __init__(self):
-        """初始化 LLM 服務"""
-        # 如果沒有設置 Key，這裡會報錯或無法使用，需確保 .env 有設定
+        """????LLM ??"""
+        # 憒?瘝?閮剔蔭 Key嚗ㄐ??舀??⊥?雿輻嚗?蝣箔? .env ?身摰?
         self.api_key = Config.OPENAI_API_KEY
         if self.api_key:
             self.client = OpenAI(api_key=self.api_key)
         else:
-            print("警告: 未設定 OPENAI_API_KEY，無法生成 LLM 報告。")
+            print("霅血?: ?芾身摰?OPENAI_API_KEY嚗瘜???LLM ?勗???)
             self.client = None
 
     def generate_report(self, portfolio_summary, tech_signals, market_sentiment):
         """
-        生成投資日報
-        :param portfolio_summary: 持倉概況 (dict)
-        :param tech_signals: 技術指標信號 (dict of dicts)
-        :param market_sentiment: 市場情緒 (dict)
-        :return: Markdown 格式的報告字串
+        ?????亙
+        :param portfolio_summary: ??瘜?(dict)
+        :param tech_signals: ?銵?璅縑??(dict of dicts)
+        :param market_sentiment: 撣?? (dict)
+        :return: Markdown ?澆????銝?
         """
         if not self.client:
-            return "⚠️ 無法生成報告：缺少 OpenAI API Key。"
+            return "?? ?⊥????勗?嚗撩撠?OpenAI API Key??
             
-        # 構建 Context JSON
+        # 瑽遣 Context JSON
         context_data = {
             "portfolio": portfolio_summary,
             "market_sentiment": market_sentiment,
             "technical_analysis": tech_signals
         }
         
-        # 將數據轉為 JSON 字串，並格式化以便 LLM 閱讀
-        # 使用 default=str 避免非標準型別 (如 numpy int/float) 導致序列化失敗
+        # 撠????JSON 摮葡嚗蒂?澆??誑靘?LLM ?梯?
+        # 雿輻 default=str ?踹???皞???(憒?numpy int/float) 撠摨??仃??
         context_json = json.dumps(context_data, indent=2, ensure_ascii=False, default=str)
         
         system_prompt = """
@@ -49,19 +49,19 @@ Objective: Analyze the user's daily portfolio and technical data to generate a c
 Tone: Professional, calm, objective, data-first. Avoid FOMO.
 
 Format Structure (Markdown):
-1. 💼 **Portfolio Snapshot**: Total value, top winners/losers (24h), cash/asset ratio.
-2. 📈 **Market & Technical Pulse**: 
+1. ? **Portfolio Snapshot**: Total value, top winners/losers (24h), cash/asset ratio.
+2. ?? **Market & Technical Pulse**: 
    - Sentiment Score (Fear & Greed).
    - Key Technical Signals: Highlight only significant signals (e.g., RSI > 75, Price crossing EMA). 
    - Specifically analyze BTC, TSLA, and NVDA.
-3. 🌍 **Macro & News Context**: Briefly interpret how current macro events (Interest rates, CPI) affect this specific portfolio.
-4. ⚠️ **Risk Radar**: Highlight concentrated risks (e.g., "Tech sector exposure > 40%").
-5. 🎯 **Actionable Advice**:
+3. ?? **Macro & News Context**: Briefly interpret how current macro events (Interest rates, CPI) affect this specific portfolio.
+4. ?? **Risk Radar**: Highlight concentrated risks (e.g., "Tech sector exposure > 40%").
+5. ? **Actionable Advice**:
    - If Asset is Overbought (RSI > 75): Suggest "Trim/Take Profit".
    - If Asset is Oversold (RSI < 30) AND Trend is Up: Suggest "Buy the Dip".
    - For "Free" assets (BNB, SOL): Suggest holding or staking unless structure breaks.
 
-Language: Traditional Chinese (繁體中文).
+Language: Traditional Chinese (蝜?銝剜?).
 Output: Clean Markdown, structured for mobile reading.
 """
 
@@ -88,6 +88,6 @@ Please generate the daily investment report based on this data.
             return response.choices[0].message.content
             
         except Exception as e:
-            print(f"LLM 生成失敗: {e}")
-            return f"⚠️ 報告生成失敗: {str(e)}"
+            print(f"LLM ??憭望?: {e}")
+            return f"?? ?勗???憭望?: {str(e)}"
 

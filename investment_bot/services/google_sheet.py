@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Google Sheet 服務 (Google Sheet Service)
 負責連接 Google Sheets API 並讀取持倉數據。
@@ -25,7 +25,7 @@ class GoogleSheetService:
             except Exception as e:
                 print(f"憑證驗證失敗: {e}")
         else:
-            print(f"警告: 找不到憑證檔案 {self.creds_file}，Google Sheet 服務將使用 Mock 數據或失敗。")
+            print(f"憑證檔不存在: {self.creds_file}，Google Sheet 服務將使用 Mock 數據模式。")
 
     def _authenticate(self):
         """驗證並建立 Sheet 服務實例"""
@@ -114,25 +114,16 @@ class GoogleSheetService:
 
     def _get_mock_data(self):
         """測試用的假數據"""
-        print("--- 使用 Mock 數據模式 ---")
+        print("⚠️ 使用 Mock Data...")
         data = {
-            'Symbol': ['BTC', 'ETH', 'SOL', 'TSLA', 'NVDA', 'IVV', 'BNB'],
-            'Qty': [0.5, 5, 100, 50, 20, 10, 10],
-            'Cost': [30000, 2000, 20, 200, 400, 350, 0], # BNB free
-            'MarketPrice': [42000, 2200, 80, 220, 480, 400, 300],
-            'UnrealizedPL': [6000, 1000, 6000, 1000, 1600, 500, 3000]
+            'Symbol': ['TSLA', 'NVDA', 'BTC', 'ETH', 'SOL'],
+            'Qty': [10, 50, 0.5, 2.0, 100],
+            'Cost': [200, 400, 30000, 2000, 20],
+            'MarketPrice': [250, 800, 65000, 3500, 150],
+            'UnrealizedPL': [500, 20000, 17500, 3000, 13000],
+            'Type': ['Stock', 'Stock', 'Crypto', 'Crypto', 'Crypto']
         }
         df = pd.DataFrame(data)
-        
-        # 計算回報率
-        df['ReturnRate'] = df.apply(
-            lambda row: (row['MarketPrice'] - row['Cost']) / row['Cost'] 
-            if row['Cost'] != 0 else 0, 
-            axis=1
-        )
-        
-        crypto_keys = set(Config.CRYPTO_MAPPING.keys())
-        df['Type'] = df['Symbol'].apply(lambda x: 'Crypto' if x in crypto_keys else 'Stock')
-        
+        # 計算 ReturnRate
+        df['ReturnRate'] = (df['MarketPrice'] - df['Cost']) / df['Cost']
         return df
-

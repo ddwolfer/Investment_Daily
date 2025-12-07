@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
-技術分析服務 (Technical Analysis Service)
-負責計算 RSI, EMA, MACD, Bollinger Bands 等技術指標。
+?銵?????(Technical Analysis Service)
+鞎痊閮? RSI, EMA, MACD, Bollinger Bands 蝑?銵?璅?
 """
 
 import pandas as pd
@@ -11,17 +11,17 @@ from ..config import Config
 class TechnicalAnalysisService:
     def analyze(self, df, asset_type):
         """
-        對傳入的 DataFrame 進行技術分析
-        :param df: 包含 Open, High, Low, Close, Volume 的 DataFrame
+        撠?亦? DataFrame ?脰??銵???
+        :param df: ? Open, High, Low, Close, Volume ??DataFrame
         :param asset_type: 'Stock' or 'Crypto'
-        :return: 包含指標的字典
+        :return: ???????
         """
-        # 檢查數據量是否足夠
+        # 瑼Ｘ?豢???西雲憭?
         if df.empty or len(df) < 20:
             return None
 
         try:
-            # 取得 Close 價格序列
+            # ?? Close ?寞摨?
             close = df['Close']
             
             # 1. RSI
@@ -30,20 +30,20 @@ class TechnicalAnalysisService:
             current_rsi = rsi_indicator.rsi().iloc[-1]
             
             # 2. EMA
-            # 確保數據長度足夠計算 EMA
+            # 蝣箔??豢??瑕漲頞喳?閮? EMA
             data_len = len(close)
             
             if asset_type == 'Crypto':
                 ema_fast_val = ta.trend.EMAIndicator(close=close, window=Config.EMA_CRYPTO_FAST).ema_indicator().iloc[-1]
                 ema_mid_val = ta.trend.EMAIndicator(close=close, window=Config.EMA_CRYPTO_MID).ema_indicator().iloc[-1]
                 ema_slow_val = ta.trend.EMAIndicator(close=close, window=Config.EMA_CRYPTO_SLOW).ema_indicator().iloc[-1]
-                # 對於 Crypto，我們也計算一下 60日線作為中長期趨勢參考 (如果有足夠數據)
+                # 撠 Crypto嚗???閮?銝銝?60?亦?雿銝剝?隅?Ｗ???(憒??雲憭??
                 if data_len >= 60:
                     ema_trend_val = ta.trend.EMAIndicator(close=close, window=60).ema_indicator().iloc[-1]
                 else:
                     ema_trend_val = ema_slow_val
             else:
-                # 美股
+                # 蝢
                 ema_fast_val = ta.trend.EMAIndicator(close=close, window=Config.EMA_SHORT).ema_indicator().iloc[-1]
                 
                 if data_len >= Config.EMA_MEDIUM:
@@ -64,15 +64,15 @@ class TechnicalAnalysisService:
             macd_signal = macd.macd_signal().iloc[-1]
             macd_hist = macd.macd_diff().iloc[-1]
             
-            # 4. Bollinger Bands (布林帶)
+            # 4. Bollinger Bands (撣?撣?
             bb = ta.volatility.BollingerBands(close=close, window=Config.BB_WINDOW, window_dev=Config.BB_STD_DEV)
             bb_upper = bb.bollinger_hband().iloc[-1]
             bb_lower = bb.bollinger_lband().iloc[-1]
             
-            # 當前價格
+            # ?嗅??寞
             current_price = close.iloc[-1]
             
-            # 信號判斷
+            # 靽∟??斗
             signals = {
                 "current_price": round(current_price, 2),
                 "rsi": round(current_rsi, 2),
@@ -98,6 +98,6 @@ class TechnicalAnalysisService:
             
             return signals
         except Exception as e:
-            print(f"技術分析計算錯誤: {e}")
+            print(f"?銵???蝞隤? {e}")
             return None
 

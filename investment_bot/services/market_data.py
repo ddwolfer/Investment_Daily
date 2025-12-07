@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 市場數據服務 (Market Data Service)
 負責從 Yahoo Finance 與 Binance (via ccxt) 獲取實時行情與歷史 K 線數據。
@@ -37,7 +37,7 @@ class MarketDataService:
             return pd.DataFrame()
 
     def _get_stock_history(self, symbol, days):
-        """使用 yfinance 獲取美股歷史數據"""
+        
         # 對映 Symbol
         ticker = Config.STOCK_MAPPING.get(symbol, symbol)
         
@@ -63,44 +63,40 @@ class MarketDataService:
 
     def _get_crypto_history(self, symbol, days):
         """使用 ccxt 獲取加密貨幣歷史數據"""
-        # 轉換 Symbol: Config.CRYPTO_MAPPING 已經是 API 格式 (BTC/USDT)
-        mapped_symbol = Config.CRYPTO_MAPPING.get(symbol, f"{symbol}/USDT")
-        
-        # 計算 timeframe
-        timeframe = '1d'
-        # ccxt limit 限制通常是 500 or 1000
-        limit = min(days + 100, 1000) 
+        # Mapping: BTC -> BTC/USDT
+        pair = Config.CRYPTO_MAPPING.get(symbol, f"{symbol}/USDT")
         
         try:
-            ohlcv = self.exchange.fetch_ohlcv(mapped_symbol, timeframe, limit=limit)
+            # fetch_ohlcv (symbol, timeframe, since, limit)
+            # 每日線 '1d'
+            # limit 預設 500, 我們需要 200 + buffer
+            ohlcv = self.exchange.fetch_ohlcv(pair, '1d', limit=days + 100)
+            
+            # 轉換為 DataFrame
+            df = pd.DataFrame(ohlcv, columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
+            df['Date'] = pd.to_datetime(df['Timestamp'], unit='ms')
+            df.set_index('Date', inplace=True)
+            df.drop(columns=['Timestamp'], inplace=True)
+            
+            return df
+            
         except Exception as e:
-            print(f"CCXT fetch error for {mapped_symbol}: {e}")
-            return pd.DataFrame()
-        
-        if not ohlcv:
+            print(f"ccxt 下載錯誤 {pair}: {e}")
             return pd.DataFrame()
 
-        # 轉為 DataFrame
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
-        df['Date'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('Date', inplace=True)
-        df.drop(columns=['timestamp'], inplace=True)
-        
-        return df
-
-    def get_fear_and_greed_index(self):
+    def get_market_sentiment(self):
         """
-        獲取恐懼與貪婪指數
-        這裡使用 alternative.me API (Crypto)
+        獲取恐懼與貪婪指數 (Fear & Greed Index)
+        Return: int (0-100)
         """
         try:
-            url = "https://api.alternative.me/fng/"
+            # Crypto Fear & Greed API
+            url = "https://api.alternative.me/fng/?limit=1"
             response = requests.get(url, timeout=10)
             data = response.json()
             value = int(data['data'][0]['value'])
             classification = data['data'][0]['value_classification']
             return {"value": value, "classification": classification}
         except Exception as e:
-            print(f"獲取恐懼貪婪指數失敗: {e}")
+            print(f"無法獲取市場情緒: {e}")
             return {"value": 50, "classification": "Neutral"}
-
