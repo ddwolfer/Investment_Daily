@@ -84,5 +84,63 @@
         ```
     *   *學習點*：在進行除法運算時，必須確保分母的完整表達式不為零，而不僅僅是分母中的某個變數。
 
+### 5. `uv add` 存取被拒與依賴損壞 (Access Denied & Broken Dependency)
+
+*   **錯誤訊息 (Error Message)**:
+    ```text
+    error: failed to remove directory ...\protobuf-5.29.5.dist-info: 存取被拒。 (os error 5)
+    warning: Failed to uninstall package ... due to missing `RECORD` file.
+    ```
+    發生在嘗試升級或重裝依賴 (`protobuf`) 時。
+
+*   **根本原因 (Root Cause)**:
+    *   **檔案鎖定**：首先是因為有 Python process (可能是測試腳本或 IDE 插件) 正在使用 `protobuf` 相關檔案，導致 `uv` 無法刪除舊版目錄，觸發 "存取被拒"。
+    *   **狀態不一致**：由於刪除操作只成功了一半（部分檔案被刪除，部分被鎖定），導致套件的 metadata (`RECORD` file) 遺失。
+    *   **自動修復**：第二次執行 `uv add` 時，`uv` 檢測到這個損壞狀態，雖然發出警告 (missing RECORD file)，但它夠聰明，直接強制覆蓋安裝了新版 (`protobuf==5.29.5`)，最終顯示安裝成功。
+
+*   **解決方案 (Solution)**:
+    *   雖然 `uv` 自動修復了，但為了保險起見，建議執行 `uv sync` 來確保環境一致性。
+    *   如果還是報錯，手動刪除 `.venv` 資料夾並重新 `uv sync` 是最徹底的解法。
+    *   *學習點*：在 Windows 上看到 "存取被拒" 後如果再次執行成功但有警告，通常代表套件管理工具進行了 Dirty Fix，需留意環境是否穩定。
+
+### 6. Python 初始化編碼錯誤 (UnicodeDecodeError in site.py)
+
+*   **錯誤訊息 (Error Message)**:
+    ```text
+    UnicodeDecodeError: 'cp950' codec can't decode byte 0xe6 in position 24: illegal multibyte sequence
+    ```
+    發生在執行 `uv run` 或啟動 Python 時，於 `site.py` 的 `addpackage` 階段崩潰。
+
+*   **根本原因 (Root Cause)**:
+    *   `uv` 在建立虛擬環境 `.venv` 時，產生了 `.pth` 檔案（如 `_investment_daily.pth`）指向專案路徑。
+    *   專案路徑中包含中文字元（例如 `OneDrive\文件`）。`uv` 預設以 **UTF-8** 編碼寫入該路徑到 `.pth` 檔。
+    *   在 Windows 上，Python 啟動時讀取 `.pth` 檔預設使用系統 ANSI 編碼（繁體中文系統為 **CP950/Big5**）。
+    *   當 Python 嘗試用 CP950 解碼 UTF-8 編碼的中文字元（`0xE6...`）時，發生解碼錯誤。
+
+*   **解決方案 (Solution)**:
+    *   設定環境變數 `PYTHONUTF8=1`，強制 Python 使用 UTF-8 作為文件系統和 IO 的預設編碼。
+    *   PowerShell 指令：`$env:PYTHONUTF8 = "1"`
+    *   *學習點*：Windows 開發環境下，若路徑包含非 ASCII 字元，極易與 Python 預設編碼發生衝突。現代 Python 開發建議在 Windows 上常駐開啟 `PYTHONUTF8` 模式。
+
+### 7. Gemini Model 404 (Model Not Found/Deprecated)
+
+*   **錯誤訊息 (Error Message)**:
+    ```text
+    API 呼叫失敗: 404 models/gemini is not found for API version v1beta...
+    ```
+    發生在嘗試呼叫 `gemini-1.5-flash` 模型時。
+
+*   **根本原因 (Root Cause)**:
+    *   `gemini-1.5-flash` 可能已被棄用、API 版本變更，或需要使用更新的別名。
+    *   Google AI Studio 的模型版本更新頻繁，舊版模型名稱可能失效。
+
+*   **解決方案 (Solution)**:
+    *   改用指向最新穩定版的通用別名：`gemini-flash-latest`。
+    *   修改代碼：
+        ```python
+        model = genai.GenerativeModel('gemini-flash-latest')
+        ```
+    *   *學習點*：在使用雲端 AI API 時，若不想頻繁追蹤版本號，可優先使用官方提供的 Latest Alias (如 `gemini-flash-latest`, `gpt-4o`)，以確保長期可用性。
+
 ---
 *持續更新中...*
