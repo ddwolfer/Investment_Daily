@@ -11,7 +11,7 @@
     *   **美股**：使用 Trend-following 策略 (EMA 20/60/120, RSI 14)。
     *   **Crypto**：使用高波動策略 (EMA 5/10/20, RSI 6)。
     *   監控 MACD 背離與布林帶 (Bollinger Bands)。
-*   **AI 智能報告**：使用 LLM (GPT-4o) 生成 Markdown 格式日報，包含：
+*   **AI 智能報告**：使用 LLM (Gemini 1.5 Flash / Pro) 生成 Markdown 格式日報，包含：
     *   資產概覽與現金水位。
     *   市場情緒 (恐懼與貪婪指數)。
     *   風險提示 (集中度風險、過熱訊號)。
@@ -54,12 +54,13 @@ uv sync
 這會自動建立虛擬環境並安裝所有依賴。
 
 ### 3. 設定環境變數 (.env)
-在 `investment_bot` 資料夾下建立 `.env` 檔案，填入以下資訊：
+在專案根目錄下建立 `.env` 檔案，填入以下資訊：
 
 ```ini
 TELEGRAM_BOT_TOKEN=你的_Telegram_Bot_Token
 TELEGRAM_CHAT_ID=你的_Chat_ID
-OPENAI_API_KEY=你的_OpenAI_API_Key
+# OPENAI_API_KEY=你的_OpenAI_API_Key  <-- 已棄用
+GEMINI_API_KEY=你的_Gemini_API_Key
 GOOGLE_SHEET_ID=你的_Google_Sheet_ID
 GOOGLE_CREDENTIALS_FILE=credentials.json
 ```
