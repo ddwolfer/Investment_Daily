@@ -45,11 +45,8 @@ def main():
     portfolio_df = sheet_service.get_portfolio_data()
     
     if portfolio_df.empty:
-        print("⚠️ 持倉數據為空，將嘗試使用 Mock 數據或停止...")
-        # 在 get_portfolio_data 內部已經處理了 Mock 邏輯，如果這裡還是空，那就是真的空了
-        if portfolio_df.empty:
-             print("❌ 無法獲取有效數據，程式終止。")
-             return
+        print("❌ 無法獲取有效數據 (Google Sheet 為空且 Mock 數據未啟用)，程式終止。")
+        return
 
     # 3. 準備數據容器
     tech_signals = {}
@@ -87,7 +84,9 @@ def main():
                 # 計算損益
                 # 如果 cost 為 0 (Free tokens)，unrealized_pl 就是 market_value
                 unrealized_pl = market_value - (cost * qty)
-                return_rate = (unrealized_pl / (cost * qty)) if cost > 0 else 0
+                # 避免除以零 (需要 cost * qty > 0)
+                total_cost = cost * qty
+                return_rate = (unrealized_pl / total_cost) if total_cost > 0 else 0
                 
                 # 更新持倉資訊
                 portfolio_summary['assets'].append({
