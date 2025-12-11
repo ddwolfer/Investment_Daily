@@ -142,5 +142,35 @@
         ```
     *   *學習點*：在使用雲端 AI API 時，若不想頻繁追蹤版本號，可優先使用官方提供的 Latest Alias (如 `gemini-flash-latest`, `gpt-4o`)，以確保長期可用性。
 
+### 8. UTF-8 BOM 編碼問題導致中文註解亂碼 (UTF-8 BOM Mojibake)
+
+*   **錯誤訊息 (Error Message)**:
+    ```text
+    LLM ???? (LLM Analyzer Service)
+    鞎痊瑽遣 Prompt 銝血??LLM ?????亙??
+    ```
+    中文註解在檔案中顯示為亂碼（mojibake），導致程式碼可讀性極差。
+
+*   **根本原因 (Root Cause)**:
+    *   檔案編碼使用了 **UTF-8 with BOM**（Byte Order Mark: `0xEF 0xBB 0xBF`）。
+    *   根據 `AGENTS.md` 專案規範，明確要求：**「UTF-8（不使用 BOM）」**。
+    *   BOM 是 Windows 工具（如記事本、舊版編輯器）為了標記 UTF-8 編碼而添加的前綴，但在 Linux/Unix 系統或現代開發工具中被視為非法字元。
+    *   當 Python 或 Git 嘗試讀取帶 BOM 的檔案時，BOM 會干擾解析，導致：
+        *   中文字符顯示錯亂（被解碼成錯誤的字符集）
+        *   `# -*- coding: utf-8 -*-` 聲明失效（BOM 干擾了第一行解析）
+        *   跨平台協作時產生 diff 衝突
+
+*   **解決方案 (Solution)**:
+    *   **策略決策**：由於 `llm_analyzer.py` 和 `telegram_bot.py` 尚在 `TODO.md` 的「待測試」階段，功能未完成，選擇重寫而非修復。
+    *   **實施方式**：保留 Class 架構（class 名稱、method 簽名），清空實作內容，添加 `# TODO: 待實現` 標記。
+    *   **重寫規範**：
+        *   使用 `write` tool 建立新檔案，確保 UTF-8 無 BOM。
+        *   所有註解使用繁體中文。
+        *   符合 `AGENTS.md` 定義的代碼風格（snake_case, docstring, type hints）。
+    *   *學習點*：
+        1. **Windows 開發必看**：Windows 編輯器（尤其舊版記事本）可能預設存成 UTF-8 BOM，需在編輯器設定中明確選擇「UTF-8 無 BOM」。
+        2. **VSCode/Cursor 設定**：檢查右下角編碼標示，確保是 `UTF-8`（非 `UTF-8 with BOM`）。
+        3. **防禦性架構**：對於未完成的模組，保留 Class 骨架比完全刪除更利於後續開發與 import 測試。
+
 ---
 *持續更新中...*
