@@ -39,3 +39,8 @@ error_log.md.bak
 .DS_Store
 Thumbs.db
 
+# Local Data / Cache
+investment_bot/data/
+*.db
+*.parquet
+

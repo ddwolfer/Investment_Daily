@@ -16,6 +16,8 @@ dependencies = [
     "google-auth-oauthlib>=1.0.0",
     "python-dotenv>=1.0.0",
     "google-generativeai>=0.8.5",
+    "pyarrow>=21.0.0",
+    "sqlalchemy>=2.0.44",
 ]
 
 [build-system]

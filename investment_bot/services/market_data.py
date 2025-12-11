@@ -2,6 +2,7 @@
 """
 市場數據服務 (Market Data Service)
 負責從 Yahoo Finance 與 Binance (via ccxt) 獲取實時行情與歷史 K 線數據。
+整合 DataStore 實現快取優先策略。
 """
 
 import yfinance as yf
@@ -10,31 +11,41 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 from ..config import Config
+from ..utils.data_store import DataStore
 
 class MarketDataService:
     def __init__(self):
         """初始化市場數據服務"""
         self.exchange = ccxt.binance()
-        # 如果有 API Key 可以設置，但讀取公開行情通常不需要
-        # self.exchange.apiKey = '...' 
+        self.store = DataStore()
         
     def get_historical_data(self, symbol, asset_type, days=200):
         """
         獲取歷史 K 線數據 (OHLCV)
-        :param symbol: 標的代碼 (e.g., 'TSLA' or 'BTC')
-        :param asset_type: 'Stock' or 'Crypto'
-        :param days: 抓取天數
-        :return: DataFrame with index as Date, columns: Open, High, Low, Close, Volume
+        Logic: Check Cache -> (Miss/Stale) -> Fetch API -> Save Cache -> Return
         """
+        # 1. Check if data is fresh (cache key exists for today)
+        if self.store.is_market_data_fresh(symbol):
+            # print(f"  [Cache Hit] {symbol}")
+            return self.store.load_market_data(symbol)
+            
+        # print(f"  [Cache Miss] Fetching API for {symbol}...")
+        
+        # 2. Fetch from API
+        df = pd.DataFrame()
         try:
             if asset_type == 'Crypto':
-                return self._get_crypto_history(symbol, days)
+                df = self._get_crypto_history(symbol, days)
             else:
-                # 預設為 Stock
-                return self._get_stock_history(symbol, days)
+                df = self._get_stock_history(symbol, days)
         except Exception as e:
             print(f"獲取數據失敗 {symbol}: {e}")
-            return pd.DataFrame()
+            
+        # 3. Save to Store (if valid)
+        if not df.empty:
+            self.store.save_market_data(df, symbol)
+            
+        return df
 
     def _get_stock_history(self, symbol, days):
         
@@ -87,8 +98,17 @@ class MarketDataService:
     def get_market_sentiment(self):
         """
         獲取恐懼與貪婪指數 (Fear & Greed Index)
-        Return: int (0-100)
+        Logic: Check Cache (Today) -> API -> Save
         """
+        today = datetime.now().strftime('%Y-%m-%d')
+        
+        # 1. Check DB Cache
+        cached = self.store.get_sentiment(today)
+        if cached:
+            # print("  [Sentiment Cache Hit]")
+            return cached
+            
+        # 2. Fetch API
         try:
             # Crypto Fear & Greed API
             url = "https://api.alternative.me/fng/?limit=1"
@@ -96,7 +116,13 @@ class MarketDataService:
             data = response.json()
             value = int(data['data'][0]['value'])
             classification = data['data'][0]['value_classification']
-            return {"value": value, "classification": classification}
+            
+            result = {"value": value, "classification": classification}
+            
+            # 3. Save to DB
+            self.store.save_sentiment(today, result)
+            return result
+            
         except Exception as e:
             print(f"無法獲取市場情緒: {e}")
             return {"value": 50, "classification": "Neutral"}
