@@ -3,12 +3,16 @@
 設定模組 (Configuration Module)
 負責管理所有的參數設定、Ticker 映射以及技術指標的閾值。
 """
-
 import os
 from dotenv import load_dotenv
 
-# 載入環境變數
-load_dotenv()
+# 強制指定 .env 路徑在專案根目錄
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)  # 往上一層
+env_path = os.path.join(project_root, '.env')
+
+# 載入
+load_dotenv(env_path)
 
 class Config:
     # --- API Keys ---
@@ -16,7 +20,15 @@ class Config:
     TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
     GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
-    GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+    
+    # 雙 Google Sheet 支援（美股 + 加密貨幣）
+    GOOGLE_SHEET_ID_STOCK = os.getenv("GOOGLE_SHEET_ID_STOCK")
+    GOOGLE_SHEET_ID_CRYPTO = os.getenv("GOOGLE_SHEET_ID_CRYPTO")
+    GOOGLE_SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE", "總損益!A:Z")  # 預設頁簽名稱
+    
+    # 向下兼容：如果只設定了舊的 GOOGLE_SHEET_ID，則作為 Stock Sheet 使用
+    if not GOOGLE_SHEET_ID_STOCK and os.getenv("GOOGLE_SHEET_ID"):
+        GOOGLE_SHEET_ID_STOCK = os.getenv("GOOGLE_SHEET_ID")
 
     # --- Ticker Mapping (將 Sheet 中的名稱映射到 API 所需的 Symbol) ---
     # Crypto: 使用 Binance 格式 (e.g., BTC/USDT)
