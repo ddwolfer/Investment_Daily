@@ -19,6 +19,7 @@ class Config:
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
     
     # 雙 Google Sheet 支援（美股 + 加密貨幣）
@@ -79,4 +80,10 @@ class Config:
     # Bollinger Bands
     BB_WINDOW = 20
     BB_STD_DEV = 2
+
+    # --- LLM 設定 (Gemini API) ---
+    GEMINI_MODEL = "gemini-flash-latest"
+    GEMINI_MAX_RETRIES = 3
+    GEMINI_TEMPERATURE = 0.7  # 創意度（0-1）
+    GEMINI_MAX_OUTPUT_TOKENS = 3000  # 最大輸出長度
 
