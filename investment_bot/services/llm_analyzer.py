@@ -75,8 +75,11 @@ class LLMAnalyzerService:
         # 格式化持倉數據
         portfolio_text = self._format_portfolio_data(portfolio_summary)
         
-        # 格式化技術指標
-        tech_signals_text = self._format_tech_signals(tech_signals)
+        # 智能篩選重點分析標的
+        focus_symbols, summary_symbols = self._select_focus_symbols(portfolio_summary, tech_signals)
+        
+        # 格式化技術指標（分層輸出）
+        tech_signals_text = self._format_tech_signals(tech_signals, focus_symbols, summary_symbols)
         
         # 格式化市場情緒
         sentiment_text = self._format_market_sentiment(market_sentiment)
@@ -118,6 +121,76 @@ class LLMAnalyzerService:
 """
         
         return prompt
+    
+    def _select_focus_symbols(self, portfolio_summary, tech_signals):
+        """
+        智能篩選需要重點分析的標的
+        
+        優先級：
+        1. Watchlist（手動指定的核心標的）
+        2. 風險警示（自動識別有問題的標的）
+        3. 限制數量（避免 token 超標）
+        
+        Args:
+            portfolio_summary: 持倉摘要
+            tech_signals: 技術分析訊號
+        
+        Returns:
+            tuple: (focus_symbols, summary_symbols)
+        """
+        focus_symbols = []
+        summary_symbols = []
+        
+        # 第 1 層：Watchlist（優先）
+        for symbol in Config.ANALYSIS_WATCHLIST:
+            if symbol in tech_signals:
+                focus_symbols.append(symbol)
+                print(f"  [LLM] Watchlist 核心標的: {symbol}")
+        
+        # 第 2 層：風險警示自動篩選
+        for symbol, signals in tech_signals.items():
+            if symbol in focus_symbols:
+                continue  # 已在 watchlist 中
+            
+            # 檢查風險條件
+            risk_reasons = []
+            
+            if signals.get('is_overbought'):
+                risk_reasons.append("RSI 超買")
+            
+            if signals.get('is_oversold'):
+                risk_reasons.append("RSI 超賣")
+            
+            if signals.get('trend') == 'Bearish':
+                risk_reasons.append("趨勢轉弱")
+            
+            # 檢查布林通道突破
+            bb = signals.get('bb', {})
+            pct_b = bb.get('pct_b', 0.5)
+            if pct_b > 1.0:
+                risk_reasons.append("突破布林上軌")
+            elif pct_b < 0:
+                risk_reasons.append("跌破布林下軌")
+            
+            if risk_reasons:
+                focus_symbols.append(symbol)
+                print(f"  [LLM] 風險警示加入重點: {symbol} ({', '.join(risk_reasons)})")
+        
+        # 限制數量（避免太多）
+        if len(focus_symbols) > Config.ANALYSIS_MAX_FOCUS:
+            print(f"  [LLM] 重點標的過多 ({len(focus_symbols)} 個)，限制為前 {Config.ANALYSIS_MAX_FOCUS} 個")
+            focus_symbols = focus_symbols[:Config.ANALYSIS_MAX_FOCUS]
+        
+        # 第 3 層：其他標的進入簡要總結
+        for symbol in tech_signals.keys():
+            if symbol not in focus_symbols:
+                summary_symbols.append(symbol)
+        
+        print(f"  [LLM] 📊 重點分析標的 ({len(focus_symbols)} 個): {focus_symbols}")
+        if summary_symbols:
+            print(f"  [LLM] 📝 簡要總結標的 ({len(summary_symbols)} 個): {summary_symbols}")
+        
+        return focus_symbols, summary_symbols
     
     def _get_system_role(self):
         """定義系統角色"""
@@ -167,14 +240,30 @@ class LLMAnalyzerService:
         
         return text
     
-    def _format_tech_signals(self, tech_signals):
-        """格式化技術指標數據"""
+    def _format_tech_signals(self, tech_signals, focus_symbols, summary_symbols):
+        """
+        格式化技術指標數據（分層輸出）
+        
+        Args:
+            tech_signals: 所有技術分析數據
+            focus_symbols: 需要詳細分析的標的列表
+            summary_symbols: 只需簡要總結的標的列表
+        """
         if not tech_signals:
             return "_目前沒有技術分析數據_\n"
         
         text = ""
         
-        for symbol, signals in tech_signals.items():
+        # === 第 1 部分：重點標的（詳細分析） ===
+        if focus_symbols:
+            text += "### 🎯 重點分析標的\n\n"
+            text += "_以下標的需要詳細關注（Watchlist + 風險警示）_\n\n"
+        
+        for symbol in focus_symbols:
+            if symbol not in tech_signals:
+                continue
+            
+            signals = tech_signals[symbol]
             text += f"### {symbol}\n\n"
             
             # 基本資訊
@@ -239,6 +328,26 @@ class LLMAnalyzerService:
             
             text += "\n---\n\n"
         
+        # === 第 2 部分：其他持倉（簡要總結） ===
+        if summary_symbols:
+            text += "### 📝 其他持倉（簡要總結）\n\n"
+            text += "_以下標的技術面穩定，僅做簡要記錄_\n\n"
+            
+            for symbol in summary_symbols:
+                if symbol not in tech_signals:
+                    continue
+                
+                signals = tech_signals[symbol]
+                current_price = signals.get('current_price', 0)
+                trend = signals.get('trend', 'N/A')
+                rsi = signals.get('rsi', 0)
+                
+                # 一行總結
+                trend_emoji = "📈" if trend == "Bullish" else "📉"
+                text += f"- **{symbol}**: ${current_price:.2f}, {trend} {trend_emoji}, RSI {rsi:.0f}\n"
+            
+            text += "\n"
+        
         return text
     
     def _format_market_sentiment(self, market_sentiment):
@@ -273,51 +382,60 @@ class LLMAnalyzerService:
         return text
     
     def _get_output_requirements(self):
-        """定義輸出要求"""
-        return """請根據以上數據生成一份**完整的投資日報**，包含以下區塊：
+        """定義輸出要求（分層報告格式）"""
+        return """請根據以上數據生成一份**分層投資日報**，包含以下區塊：
 
-### 📊 1. 投資組合總覽
-- 總市值、今日損益（如果有歷史數據）、整體報酬率
+### ⚠️ 1. 風險警示
+列出需要立即關注的問題：
+- RSI 超買/超賣的標的
+- 趨勢轉弱的標的
+- 價格突破布林通道的標的
+- 用 1-2 句話總結整體風險程度
 
-### ⚠️ 2. 風險警示
-列出需要特別關注的持倉：
-- RSI 超買（> 75）的標的
-- 趨勢轉弱（價格跌破 EMA）的標的
-- MACD 背離或轉弱的標的
+### 🎯 2. 操作建議（分層報告）
 
-### 🎯 3. 操作建議
-針對**每個持倉**，給出明確的建議：
+#### 2.1 重點分析標的（詳細）
+針對「重點分析標的」區塊中的每個標的，進行**詳細分析**（每個約 100-150 字）：
 
 **格式範例**：
 - **TSLA (特斯拉)**
   - **建議**: 持有
-  - **理由**: RSI 65 處於健康區間，MACD 持續多頭排列，價格站穩 EMA20 上方
+  - **理由**: RSI 65.43 處於健康區間，MACD 持續多頭排列，價格站穩 EMA20 上方
   - **參考點位**: 支撐 $440 (EMA20)，壓力 $480 (布林上軌)
   - **操作**: 建議繼續持有現有 10 股
 
 - **BTC (比特幣)**
   - **建議**: 適度減碼
-  - **理由**: RSI 78 已超買，MACD 柱狀圖開始縮小，價格接近布林上軌
-  - **參考點位**: 壓力 $66,000 (布林上軌)，支撐 $60,000 (EMA10)
+  - **理由**: RSI 78.50 已超買，價格接近布林上軌 $92,000
+  - **參考點位**: 壓力 $92,000 (布林上軌)，支撐 $86,500 (EMA20)
   - **操作**: 建議減碼 20%（約 0.1 BTC），降低風險暴露
 
-### 🌍 4. 市場情緒分析
-- Fear & Greed Index 的解讀
-- 與當前持倉技術面的交叉驗證
-- 是否符合當前市場氛圍的配置策略
+#### 2.2 其他持倉（摘要）
+針對「其他持倉」區塊中的標的，用**一行總結**（每個約 15-20 字）：
 
-### 📋 5. 今日重點關注
-- 列出 3-5 個最需要關注的標的
-- 排序依據：風險程度、技術面變化、操作優先級
+**格式範例**：
+- **AAPL**: 持有，技術面穩健，RSI 58
+- **MSFT**: 持有，多頭趨勢，無風險訊號
+- **ETH**: 持有，跟隨 BTC 走勢
+
+### 🌍 3. 市場情緒分析
+- Fear & Greed Index 的解讀（1-2 句話）
+- 與當前持倉技術面的交叉驗證
+- 是否符合當前市場氛圍
+
+### 📋 4. 今日重點關注
+- 列出 2-3 個最需要優先處理的標的
+- 一句話說明優先級理由
 
 ---
 
 **注意事項**：
-1. 所有建議必須有明確的技術依據（引用具體的指標數值）
-2. 數量建議要具體（例如：建議減碼 20%，約 5 股）
-3. 使用 Markdown 格式，適合 Telegram 顯示
-4. 語氣客觀專業，避免誇大或恐慌
-5. 報告總長度控制在 2000-3000 字以內"""
+1. 重點分析標的：每個 100-150 字，必須有明確技術依據
+2. 其他持倉：每個 15-20 字，簡潔總結即可
+3. 數量建議要具體（例如：建議減碼 20%，約 5 股）
+4. 使用 Markdown 格式，適合 Telegram 顯示
+5. 語氣客觀專業，避免誇大或恐慌
+6. **報告總長度控制在 1500-2200 字以內**（重點在質量而非數量）"""
     
     def _call_gemini_api(self, prompt):
         """

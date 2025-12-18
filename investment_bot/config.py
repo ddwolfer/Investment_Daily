@@ -87,4 +87,11 @@ class Config:
     GEMINI_MAX_RETRIES = 3
     GEMINI_TEMPERATURE = 0.7  # 創意度（0-1）
     GEMINI_MAX_OUTPUT_TOKENS = 5000  # 最大輸出長度
+    
+    # --- LLM 分析設定 ---
+    # Watchlist: 始終進行詳細分析的標的（核心關注）
+    ANALYSIS_WATCHLIST = ["IVV", "TSLA", "BTC"]
+    
+    # 最多詳細分析的標的數量（避免 token 超標）
+    ANALYSIS_MAX_FOCUS = 6
 
