@@ -109,7 +109,7 @@ def main():
     
     # 5. 獲取市場情緒
     print("😨 正在獲取恐懼貪婪指數...")
-    sentiment = market_service.get_fear_and_greed_index()
+    sentiment = market_service.get_market_sentiment()
     print(f"   指數: {sentiment['value']} ({sentiment['classification']})")
     
     # 6. 生成報告
