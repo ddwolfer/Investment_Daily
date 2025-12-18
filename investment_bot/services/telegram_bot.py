@@ -32,6 +32,50 @@ class TelegramBotService:
             except Exception as e:
                 print(f"  [Telegram] Bot 初始化失敗: {e}")
     
+    def _markdown_to_html(self, text):
+        """
+        將簡單的 Markdown 格式轉換為 HTML（Telegram 支援）
+        
+        轉換規則：
+        - **粗體** → <b>粗體</b>
+        - *斜體* → <i>斜體</i>
+        - `代碼` → <code>代碼</code>
+        - # 標題 → <b>標題</b>
+        - ## 標題 → <b>標題</b>
+        - [文字](連結) → <a href="連結">文字</a>
+        
+        參考：https://tgtw.cc/post-about-parse-mode-of-telegram
+        
+        Args:
+            text: Markdown 文字
+        
+        Returns:
+            str: HTML 文字
+        """
+        import re
+        
+        # 1. 處理標題（# ## ### 開頭的行）
+        text = re.sub(r'^###\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+        text = re.sub(r'^##\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+        text = re.sub(r'^#\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+        
+        # 2. 處理粗體 **文字**
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+        
+        # 3. 處理斜體 *文字* （但要避免影響到 ** 的處理）
+        text = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+        
+        # 4. 處理行內代碼 `代碼`
+        text = re.sub(r'`([^`]+?)`', r'<code>\1</code>', text)
+        
+        # 5. 處理連結 [文字](網址)
+        text = re.sub(r'\[([^\]]+?)\]\(([^\)]+?)\)', r'<a href="\2">\1</a>', text)
+        
+        # 6. 轉義 HTML 特殊字元（但保留我們剛轉換的 HTML 標籤）
+        # 注意：這裡我們不做額外的 HTML 轉義，因為 Telegram 會自動處理
+        
+        return text
+    
     def send_report(self, report_text):
         """
         推送報告到 Telegram（同步包裝）
@@ -50,6 +94,9 @@ class TelegramBotService:
             print("  [Telegram] Bot 未初始化，無法推送")
             return False
         
+        # 轉換為 HTML 格式
+        html_text = self._markdown_to_html(report_text)
+        
         # 使用 asyncio 執行異步函數
         try:
             # 嘗試獲取現有事件循環，如果不存在則創建新的
@@ -62,7 +109,7 @@ class TelegramBotService:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            result = loop.run_until_complete(self._send_message_async(report_text))
+            result = loop.run_until_complete(self._send_message_async(html_text))
             return result
         except Exception as e:
             print(f"  [Telegram] 推送失敗: {e}")
@@ -94,7 +141,7 @@ class TelegramBotService:
                 send_params = {
                     "chat_id": self.chat_id,
                     "text": text,
-                    "parse_mode": ParseMode.MARKDOWN,
+                    "parse_mode": ParseMode.HTML,
                     "disable_web_page_preview": True
                 }
                 
@@ -229,12 +276,12 @@ class TelegramBotService:
             bool: 是否發送成功
         """
         test_message = """
-🤖 **Telegram Bot 測試訊息**
+🤖 <b>Telegram Bot 測試訊息</b>
 
 這是一條測試訊息，用於驗證 Bot 連接。
 
-**測試項目**:
-- ✅ Markdown 格式
+<b>測試項目</b>:
+- ✅ HTML 格式
 - ✅ Emoji 支援
 - ✅ 繁體中文顯示
 
