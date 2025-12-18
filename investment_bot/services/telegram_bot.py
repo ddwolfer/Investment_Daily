@@ -187,6 +187,43 @@ class TelegramBotService:
         
         return text
     
+    def _add_report_header(self, report_text):
+        """
+        在報告開頭添加標題和日期
+        
+        Args:
+            report_text: LLM 生成的報告內容
+        
+        Returns:
+            str: 添加標題後的完整報告
+        """
+        from datetime import datetime
+        
+        # 獲取當前日期和星期
+        current_date = datetime.now().strftime('%Y年%m月%d日')
+        current_weekday = datetime.now().strftime('%A')
+        weekday_cn = {
+            'Monday': '星期一',
+            'Tuesday': '星期二',
+            'Wednesday': '星期三',
+            'Thursday': '星期四',
+            'Friday': '星期五',
+            'Saturday': '星期六',
+            'Sunday': '星期日'
+        }.get(current_weekday, '')
+        
+        # 組裝報告頭部
+        header = f"""<b>📊 專業技術分析日報</b>
+
+<b>報告日期</b>：{current_date} ({weekday_cn})
+<b>分析師</b>：系統技術分析師
+
+───────────────────
+
+"""
+        
+        return header + report_text
+    
     def send_report(self, report_text):
         """
         推送報告到 Telegram（同步包裝）
@@ -205,8 +242,11 @@ class TelegramBotService:
             print("  [Telegram] Bot 未初始化，無法推送")
             return False
         
+        # 添加報告頭部（標題和日期）
+        report_with_header = self._add_report_header(report_text)
+        
         # 清理 LLM 可能生成的不支援 HTML 標籤
-        cleaned_text = self._clean_unsupported_html_tags(report_text)
+        cleaned_text = self._clean_unsupported_html_tags(report_with_header)
         
         # 使用 asyncio 執行異步函數
         try:
