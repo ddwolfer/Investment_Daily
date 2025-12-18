@@ -26,7 +26,7 @@ def print_separator(title=""):
 
 def test_configuration():
     """測試 Bot 配置"""
-    print_separator("[1/5] 測試 Bot 配置")
+    print_separator("[1/6] 測試 Bot 配置")
     
     print("\n  檢查環境變數...")
     
@@ -48,11 +48,34 @@ def test_configuration():
         print(f"    ⚠️  請在 .env 中設定 TELEGRAM_CHAT_ID")
         config_ok = False
     
+    if Config.TELEGRAM_TOPIC_ID:
+        print(f"    ✅ TELEGRAM_TOPIC_ID: {Config.TELEGRAM_TOPIC_ID} (將發送到指定 Topic)")
+    else:
+        print(f"    ℹ️  TELEGRAM_TOPIC_ID: 未設定 (將發送到主頻道)")
+    
     return config_ok
+
+def test_get_topic_id(service):
+    """測試獲取 Topic ID（輔助工具）"""
+    print_separator("[2/6] 獲取 Topic ID（可選）")
+    
+    if not service:
+        print("\n    ⚠️  跳過（服務未初始化）")
+        return
+    
+    print("\n  此步驟用於幫助你找到群組 Topic ID")
+    print("  如果你不需要發送到特定 Topic，可以跳過\n")
+    
+    user_input = input("  是否要獲取 Topic ID？(y/n): ").strip().lower()
+    
+    if user_input == 'y':
+        service.get_topic_info()
+    else:
+        print("  跳過 Topic ID 獲取")
 
 def test_service_initialization():
     """測試服務初始化"""
-    print_separator("[2/5] 測試服務初始化")
+    print_separator("[3/6] 測試服務初始化")
     
     print("\n  正在初始化 TelegramBotService...")
     
@@ -72,7 +95,7 @@ def test_service_initialization():
 
 def test_connection(service):
     """測試連接"""
-    print_separator("[3/5] 測試連接")
+    print_separator("[4/6] 測試連接")
     
     if not service:
         print("\n    ⚠️  跳過測試（服務未初始化）")
@@ -98,7 +121,7 @@ def test_connection(service):
 
 def test_markdown_format(service):
     """測試 Markdown 格式"""
-    print_separator("[4/5] 測試 Markdown 格式")
+    print_separator("[5/6] 測試 Markdown 格式")
     
     if not service:
         print("\n    ⚠️  跳過測試（服務未初始化）")
@@ -151,7 +174,7 @@ _測試完成_
 
 def test_full_report(service):
     """測試完整報告發送"""
-    print_separator("[5/5] 測試完整報告發送")
+    print_separator("[6/6] 測試完整報告發送")
     
     if not service:
         print("\n    ⚠️  跳過測試（服務未初始化）")
@@ -260,19 +283,25 @@ def main():
         print("請確認 .env 中已設定 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID")
         return
     
-    # 測試 2: 服務初始化
+    # 測試 2: 獲取 Topic ID（可選）
+    # 注意：需要先初始化服務才能獲取 Topic ID
+    temp_service = TelegramBotService()
+    if temp_service and temp_service.bot:
+        test_get_topic_id(temp_service)
+    
+    # 測試 3: 服務初始化
     service = test_service_initialization()
     if not service:
         print("\n❌ 測試終止：服務初始化失敗")
         return
     
-    # 測試 3: 連接測試
+    # 測試 4: 連接測試
     connection_ok = test_connection(service)
     
-    # 測試 4: Markdown 格式
+    # 測試 5: Markdown 格式
     markdown_ok = test_markdown_format(service)
     
-    # 測試 5: 完整報告
+    # 測試 6: 完整報告
     report_ok = test_full_report(service)
     
     # 總結

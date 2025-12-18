@@ -15,6 +15,7 @@ class TelegramBotService:
         """初始化 Telegram Bot 服務"""
         self.token = Config.TELEGRAM_BOT_TOKEN
         self.chat_id = Config.TELEGRAM_CHAT_ID
+        self.topic_id = Config.TELEGRAM_TOPIC_ID  # 群組 Topic ID (可選)
         self.bot = None
         
         if not self.token:
@@ -24,7 +25,10 @@ class TelegramBotService:
         else:
             try:
                 self.bot = Bot(token=self.token)
-                print(f"  [Telegram] Bot 初始化成功")
+                if self.topic_id:
+                    print(f"  [Telegram] Bot 初始化成功 (Topic ID: {self.topic_id})")
+                else:
+                    print(f"  [Telegram] Bot 初始化成功")
             except Exception as e:
                 print(f"  [Telegram] Bot 初始化失敗: {e}")
     
@@ -86,12 +90,19 @@ class TelegramBotService:
                 print(f"  [Telegram] 正在發送訊息 (嘗試 {attempt + 1}/{max_retries})...")
                 
                 # 發送訊息
-                message = await self.bot.send_message(
-                    chat_id=self.chat_id,
-                    text=text,
-                    parse_mode=ParseMode.MARKDOWN,
-                    disable_web_page_preview=True
-                )
+                # 如果設定了 topic_id，則發送到指定的 topic
+                send_params = {
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "parse_mode": ParseMode.MARKDOWN,
+                    "disable_web_page_preview": True
+                }
+                
+                # 加入 topic ID（如果有設定）
+                if self.topic_id:
+                    send_params["message_thread_id"] = int(self.topic_id)
+                
+                message = await self.bot.send_message(**send_params)
                 
                 print(f"  [Telegram] ✅ 訊息發送成功 (Message ID: {message.message_id})")
                 return True
@@ -190,12 +201,18 @@ class TelegramBotService:
             bool: 是否發送成功
         """
         try:
-            message = await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=text,
-                parse_mode=None,  # 純文字模式
-                disable_web_page_preview=True
-            )
+            send_params = {
+                "chat_id": self.chat_id,
+                "text": text,
+                "parse_mode": None,  # 純文字模式
+                "disable_web_page_preview": True
+            }
+            
+            # 加入 topic ID（如果有設定）
+            if self.topic_id:
+                send_params["message_thread_id"] = int(self.topic_id)
+            
+            message = await self.bot.send_message(**send_params)
             
             print(f"  [Telegram] ✅ 使用純文字模式發送成功 (Message ID: {message.message_id})")
             return True
@@ -253,4 +270,89 @@ class TelegramBotService:
             return result
         except Exception as e:
             print(f"  [Telegram] 連接測試失敗: {e}")
+            return False
+    
+    async def _get_updates_async(self):
+        """
+        異步獲取 Bot 的更新訊息（用於查找 Topic ID）
+        
+        Returns:
+            list: 更新訊息列表
+        """
+        try:
+            updates = await self.bot.get_updates(limit=10)
+            return updates
+        except Exception as e:
+            print(f"  [Telegram] 獲取更新失敗: {e}")
+            return []
+    
+    def get_topic_info(self):
+        """
+        獲取並顯示最近訊息的 Topic ID（用於設定 TELEGRAM_TOPIC_ID）
+        
+        使用方法：
+        1. 在 Telegram 群組的目標 topic 中發送一則訊息（例如：/start）
+        2. 執行此函數
+        3. 查看輸出中的 message_thread_id
+        
+        Returns:
+            bool: 是否成功獲取資訊
+        """
+        if not self.bot:
+            print("  [Telegram] Bot 未初始化")
+            return False
+        
+        print("\n" + "="*80)
+        print("  獲取 Telegram Topic ID")
+        print("="*80)
+        print("\n請確認你已在目標 Topic 中發送訊息給 Bot（例如：/start）\n")
+        
+        try:
+            # 嘗試獲取現有事件循環
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_closed():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            updates = loop.run_until_complete(self._get_updates_async())
+            
+            if not updates:
+                print("⚠️  未找到任何更新訊息")
+                print("   請先在 Telegram 群組的目標 topic 中發送訊息給 Bot")
+                return False
+            
+            print(f"找到 {len(updates)} 則最近的訊息:\n")
+            
+            for idx, update in enumerate(updates, 1):
+                if update.message:
+                    msg = update.message
+                    chat_id = msg.chat.id
+                    chat_type = msg.chat.type
+                    chat_title = msg.chat.title if msg.chat.title else "私人對話"
+                    message_thread_id = msg.message_thread_id if hasattr(msg, 'message_thread_id') else None
+                    
+                    print(f"訊息 #{idx}:")
+                    print(f"  Chat ID: {chat_id}")
+                    print(f"  Chat 類型: {chat_type}")
+                    print(f"  Chat 名稱: {chat_title}")
+                    
+                    if message_thread_id:
+                        print(f"  ✅ Topic ID: {message_thread_id}")
+                        print(f"     將以下內容加入 .env 檔案:")
+                        print(f"     TELEGRAM_TOPIC_ID={message_thread_id}")
+                    else:
+                        print(f"  ℹ️  此訊息沒有 Topic ID（可能是主頻道或私人對話）")
+                    
+                    print()
+            
+            return True
+            
+        except Exception as e:
+            print(f"  [Telegram] 獲取 Topic 資訊失敗: {e}")
+            import traceback
+            traceback.print_exc()
             return False
