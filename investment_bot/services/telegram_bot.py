@@ -32,6 +32,117 @@ class TelegramBotService:
             except Exception as e:
                 print(f"  [Telegram] Bot 初始化失敗: {e}")
     
+    def _escape_html_special_chars(self, text):
+        """
+        轉義 HTML 特殊字符，但保留合法的 HTML 標籤
+        
+        策略：
+        1. 先用佔位符替換合法的 HTML 標籤
+        2. 轉義所有的 & < >
+        3. 還原佔位符為 HTML 標籤
+        
+        Args:
+            text: 包含 HTML 標籤的文字
+        
+        Returns:
+            str: 轉義後的文字
+        """
+        import re
+        import uuid
+        
+        # 生成唯一佔位符前綴
+        placeholder_prefix = f"__HTML_TAG_{uuid.uuid4().hex[:8]}__"
+        
+        # 儲存合法的 HTML 標籤
+        saved_tags = {}
+        tag_counter = 0
+        
+        # Telegram 支援的 HTML 標籤（完整列表）
+        # 參考：https://core.telegram.org/bots/api#html-style
+        supported_tags = [
+            r'<b>(.*?)</b>',
+            r'<strong>(.*?)</strong>',
+            r'<i>(.*?)</i>',
+            r'<em>(.*?)</em>',
+            r'<u>(.*?)</u>',
+            r'<ins>(.*?)</ins>',
+            r'<s>(.*?)</s>',
+            r'<strike>(.*?)</strike>',
+            r'<del>(.*?)</del>',
+            r'<code>(.*?)</code>',
+            r'<pre>(.*?)</pre>',
+            r'<a\s+href="[^"]*">(.*?)</a>',  # 連結標籤
+        ]
+        
+        # 1. 保存合法的 HTML 標籤
+        for pattern in supported_tags:
+            def replacer(match):
+                nonlocal tag_counter
+                placeholder = f"{placeholder_prefix}{tag_counter}{placeholder_prefix}"
+                saved_tags[placeholder] = match.group(0)
+                tag_counter += 1
+                return placeholder
+            
+            text = re.sub(pattern, replacer, text, flags=re.IGNORECASE | re.DOTALL)
+        
+        # 2. 轉義特殊字符
+        text = text.replace('&', '&amp;')  # & 必須最先處理
+        text = text.replace('<', '&lt;')
+        text = text.replace('>', '&gt;')
+        
+        # 3. 還原合法的 HTML 標籤
+        for placeholder, original_tag in saved_tags.items():
+            text = text.replace(placeholder, original_tag)
+        
+        return text
+    
+    def _clean_unsupported_html_tags(self, text):
+        """
+        清理 Telegram 不支援的 HTML 標籤並轉義特殊字符
+        
+        Telegram HTML 模式只支援：<b>, <i>, <u>, <s>, <code>, <pre>, <a>
+        不支援：<h1>, <h2>, <h3>, <ul>, <ol>, <li>, <p>, <div>, <hr> 等
+        
+        參考：https://core.telegram.org/bots/api#html-style
+        
+        Args:
+            text: 包含 HTML 標籤的文字
+        
+        Returns:
+            str: 清理並轉義後的文字
+        """
+        import re
+        
+        # 第一步：移除不支援的 HTML 標籤
+        
+        # 1. 移除不支援的標題標籤（h1-h6），保留內容並加粗
+        text = re.sub(r'<h[1-6]>(.*?)</h[1-6]>', r'<b>\1</b>\n', text, flags=re.IGNORECASE)
+        
+        # 2. 移除列表標籤（ul, ol），保留內容
+        text = re.sub(r'</?ul>', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'</?ol>', '', text, flags=re.IGNORECASE)
+        
+        # 3. 移除列表項目標籤（li），轉換為 "- " 開頭
+        text = re.sub(r'<li>(.*?)</li>', r'  - \1\n', text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r'<li>', '  - ', text, flags=re.IGNORECASE)
+        
+        # 4. 移除段落標籤（p），保留內容並加換行
+        text = re.sub(r'<p>(.*?)</p>', r'\1\n\n', text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r'</?p>', '', text, flags=re.IGNORECASE)
+        
+        # 5. 移除水平線標籤（hr），替換為文字分隔線
+        text = re.sub(r'<hr\s*/?>', '\n───────────────────\n', text, flags=re.IGNORECASE)
+        
+        # 6. 移除容器標籤（div, span），保留內容
+        text = re.sub(r'</?div[^>]*>', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'</?span[^>]*>', '', text, flags=re.IGNORECASE)
+        
+        # 第二步：轉義文本中的 HTML 特殊字符（< > &）
+        # 但保留合法的 HTML 標籤
+        text = self._escape_html_special_chars(text)
+        
+        return text
+    
     def _markdown_to_html(self, text):
         """
         將簡單的 Markdown 格式轉換為 HTML（Telegram 支援）
@@ -81,7 +192,7 @@ class TelegramBotService:
         推送報告到 Telegram（同步包裝）
         
         Args:
-            report_text: 報告內容 (Markdown 格式)
+            report_text: 報告內容 (HTML 格式，LLM 已生成)
         
         Returns:
             bool: 是否發送成功
@@ -94,8 +205,8 @@ class TelegramBotService:
             print("  [Telegram] Bot 未初始化，無法推送")
             return False
         
-        # 轉換為 HTML 格式
-        html_text = self._markdown_to_html(report_text)
+        # 清理 LLM 可能生成的不支援 HTML 標籤
+        cleaned_text = self._clean_unsupported_html_tags(report_text)
         
         # 使用 asyncio 執行異步函數
         try:
@@ -109,7 +220,7 @@ class TelegramBotService:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             
-            result = loop.run_until_complete(self._send_message_async(html_text))
+            result = loop.run_until_complete(self._send_message_async(cleaned_text))
             return result
         except Exception as e:
             print(f"  [Telegram] 推送失敗: {e}")
