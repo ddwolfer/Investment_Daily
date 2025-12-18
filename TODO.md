@@ -8,31 +8,38 @@
 ## 🔴 高優先級（Critical）
 
 ### 1. 測試 Market Data API 連接
-- [ ] **驗證 yfinance (美股數據)**
+- [x] **驗證 yfinance (美股數據)**
   - 測試標的：TSLA, NVDA, IVV
   - 驗證項目：數據完整性、日期範圍、欄位正確性
-  - 📁 測試腳本：`test_script/test_market_apis.py`（待建立）
+  - 📁 測試腳本：`test_script/test_market_apis.py` ✅
+  - 測試結果：3/3 通過，數據完整
 
-- [ ] **驗證 ccxt/Binance (加密貨幣數據)**
+- [x] **驗證 ccxt/Binance (加密貨幣數據)**
   - 測試標的：BTC, ETH, SOL
   - 驗證項目：API 連接、交易對對映、數據格式
+  - 測試結果：3/3 通過，交易對對映正確
   
-- [ ] **驗證 Fear & Greed Index API**
+- [x] **驗證 Fear & Greed Index API**
   - API 端點：https://api.alternative.me/fng/
   - 驗證項目：回傳值、錯誤處理、快取邏輯
+  - 測試結果：通過，當前值 16 (Extreme Fear)
 
 ### 2. 測試 LLM 服務 (Gemini)
-- [ ] **驗證 Gemini API 連接**
-  - 測試腳本已存在：`test_script/test_gemini.py`
+- [x] **驗證 Gemini API 連接**
+  - 測試腳本：`test_script/test_llm_analyzer.py` ✅
   - 驗證模型：`gemini-flash-latest`
+  - 測試結果：API 調用成功
   
-- [ ] **測試報告生成品質**
+- [x] **測試報告生成品質**
   - 輸入：測試用的持倉數據 + 技術信號
-  - 驗證項目：Markdown 格式、繁體中文、風控官語氣
+  - 驗證項目：Markdown 格式、中性技術分析師語氣、明確買賣建議
+  - 測試結果：報告品質優秀（2984 字元，110 行）
   
-- [ ] **檢查 Token 用量與成本**
-  - 記錄每次生成的 token 數量
-  - 估算每日成本
+- [x] **檢查 Token 用量與成本**
+  - 輸入 Token：~844 tokens
+  - 輸出 Token：~995 tokens (2984 字元 / 3)
+  - 總計：~1839 tokens/次
+  - 估算成本：$0.001-0.002/次（Gemini Flash）
 
 ### 3. 測試 Telegram Bot
 - [ ] **驗證訊息發送功能**

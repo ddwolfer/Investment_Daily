@@ -85,5 +85,5 @@ class Config:
     GEMINI_MODEL = "gemini-flash-latest"
     GEMINI_MAX_RETRIES = 3
     GEMINI_TEMPERATURE = 0.7  # 創意度（0-1）
-    GEMINI_MAX_OUTPUT_TOKENS = 3000  # 最大輸出長度
+    GEMINI_MAX_OUTPUT_TOKENS = 5000  # 最大輸出長度
 
