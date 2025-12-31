@@ -172,5 +172,39 @@
         2. **VSCode/Cursor 設定**：檢查右下角編碼標示，確保是 `UTF-8`（非 `UTF-8 with BOM`）。
         3. **防禦性架構**：對於未完成的模組，保留 Class 骨架比完全刪除更利於後續開發與 import 測試。
 
+### 9. NameError: name 'Config' is not defined
+
+*   **錯誤訊息 (Error Message)**:
+    ```text
+    NameError: name 'Config' is not defined
+    ```
+    發生在 `main.py` 第 63 行使用 `Config.ANALYSIS_SKIP_LIST` 時。
+
+*   **根本原因 (Root Cause)**:
+    *   在新增 `ANALYSIS_SKIP_LIST` 功能時，在 `main.py` 中使用了 `Config` 類別，但忘記加入 import 語句。
+    *   `main.py` 原本只 import 了服務類別，沒有 import `Config`。
+
+*   **解決方案 (Solution)**:
+    *   在 `main.py` 的 import 區塊中加入：`from investment_bot.config import Config`
+    *   *學習點*：新增功能時要檢查所有相關的 import 是否完整，特別是跨模組使用類別時。
+
+### 10. PowerShell 指令語法錯誤 (ParserError: InvalidEndOfLine)
+
+*   **錯誤訊息 (Error Message)**:
+    ```text
+    ParserError: (:) [], ParentContainsErrorRecordException
+    InvalidEndOfLine
+    ```
+    發生在執行 `cd path && command` 時。
+
+*   **根本原因 (Root Cause)**:
+    *   在 Windows PowerShell (v5.1) 中，不支援使用 `&&` 作為指令連接符（這是 Bash 或 PowerShell 7+ 的語法）。
+    *   在 PowerShell 中，指令連接符應使用分號 `;`。
+
+*   **解決方案 (Solution)**:
+    *   將 `&&` 改為 `;`。
+    *   指令：`cd D:\AI\Investment_Daily; $env:PYTHONUTF8=1; uv run python test_script/test_xxx.py`
+    *   *學習點*：編寫終端機指令時，需注意目前使用的 Shell 類型（PowerShell vs Bash）。在 Cursor 的預設 Windows 終端機通常是 PowerShell。
+
 ---
 *持續更新中...*

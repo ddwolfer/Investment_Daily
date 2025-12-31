@@ -92,6 +92,10 @@ class Config:
     # Watchlist: 始終進行詳細分析的標的（核心關注）
     ANALYSIS_WATCHLIST = ["IVV", "TSLA", "BTC"]
     
+    # 跳過分析的標的（例如：現金儲備類資產、超短期美債）
+    # 這些標的不會進行技術分析，也不會出現在詳細報告中
+    ANALYSIS_SKIP_LIST = ["IB01.L"]
+    
     # 最多詳細分析的標的數量（避免 token 超標）
     ANALYSIS_MAX_FOCUS = 6
 

@@ -263,16 +263,21 @@ class LLMAnalyzerService:
         focus_symbols = []
         summary_symbols = []
         
+        # 獲取跳過清單
+        skip_list = getattr(Config, 'ANALYSIS_SKIP_LIST', [])
+        
         # 第 1 層：Watchlist（優先）
         for symbol in Config.ANALYSIS_WATCHLIST:
+            if symbol in skip_list:
+                continue  # 跳過黑名單標的
             if symbol in tech_signals:
                 focus_symbols.append(symbol)
                 print(f"  [LLM] Watchlist 核心標的: {symbol}")
         
         # 第 2 層：風險警示自動篩選
         for symbol, signals in tech_signals.items():
-            if symbol in focus_symbols:
-                continue  # 已在 watchlist 中
+            if symbol in focus_symbols or symbol in skip_list:
+                continue  # 已在 watchlist 中或在跳過清單中
             
             # 檢查風險條件
             risk_reasons = []
@@ -305,7 +310,7 @@ class LLMAnalyzerService:
         
         # 第 3 層：其他標的進入簡要總結
         for symbol in tech_signals.keys():
-            if symbol not in focus_symbols:
+            if symbol not in focus_symbols and symbol not in skip_list:
                 summary_symbols.append(symbol)
         
         print(f"  [LLM] 📊 重點分析標的 ({len(focus_symbols)} 個): {focus_symbols}")

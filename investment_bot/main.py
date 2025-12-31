@@ -15,6 +15,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 try:
+    from investment_bot.config import Config
     from investment_bot.services.google_sheet import GoogleSheetService
     from investment_bot.services.market_data import MarketDataService
     from investment_bot.services.tech_analysis import TechnicalAnalysisService
@@ -59,6 +60,9 @@ def main():
     print("📉 正在進行技術分析 (這可能需要一點時間)...")
     total_value = 0
     
+    # 獲取跳過清單
+    skip_list = getattr(Config, 'ANALYSIS_SKIP_LIST', [])
+    
     for _, row in portfolio_df.iterrows():
         symbol = row['Symbol']
         asset_type = row['Type']
@@ -67,7 +71,35 @@ def main():
         
         print(f"  -> 處理中: {symbol} ({asset_type})...")
         
-        # 抓取歷史數據
+        # 1. 檢查是否在跳過清單中
+        if symbol in skip_list:
+            print(f"     ⏩ 跳過技術分析: {symbol} (在 ANALYSIS_SKIP_LIST 中)")
+            # 仍嘗試獲取最新價格以計算總市值，但只抓取極少數據以節省時間
+            hist_df = market_service.get_historical_data(symbol, asset_type, days=5)
+            if not hist_df.empty:
+                current_price = float(hist_df['Close'].iloc[-1])
+                market_value = current_price * qty
+                total_value += market_value
+                
+                # 計算損益
+                unrealized_pl = market_value - (cost * qty)
+                total_cost = cost * qty
+                return_rate = (unrealized_pl / total_cost) if total_cost > 0 else 0
+                
+                # 加入持倉摘要，但不加入 tech_signals
+                portfolio_summary['assets'].append({
+                    "symbol": symbol,
+                    "type": asset_type,
+                    "qty": qty,
+                    "current_price": current_price,
+                    "market_value": market_value,
+                    "cost_basis": cost,
+                    "unrealized_pl": unrealized_pl,
+                    "return_rate": return_rate
+                })
+            continue
+
+        # 2. 正常流程：抓取歷史數據並分析
         hist_df = market_service.get_historical_data(symbol, asset_type)
         
         if not hist_df.empty:
