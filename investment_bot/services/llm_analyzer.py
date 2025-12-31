@@ -4,8 +4,10 @@ LLM 分析服務 (LLM Analyzer Service)
 負責整合 Prompt 並呼叫 LLM 生成投資報告
 """
 
+import os
 import time
 from datetime import datetime
+from pathlib import Path
 from ..config import Config
 
 class LLMAnalyzerService:
@@ -14,6 +16,11 @@ class LLMAnalyzerService:
         self.api_key = Config.GEMINI_API_KEY
         self.model_name = Config.GEMINI_MODEL
         self.max_retries = Config.GEMINI_MAX_RETRIES
+        
+        # 載入外部 Prompt 文件
+        self.prompt_dir = Path(__file__).parent.parent.parent / "prompts"
+        self.system_role = self._load_prompt_file("system_role.txt")
+        self.output_requirements = self._load_prompt_file("output_requirements.txt")
         
         # 延遲初始化 Gemini（避免沒有 API Key 時報錯）
         self.client = None
@@ -27,6 +34,121 @@ class LLMAnalyzerService:
                 print(f"  [LLM] Gemini 初始化失敗: {e}")
         else:
             print("  [LLM] 警告: 未設定 GEMINI_API_KEY，LLM 功能將無法使用")
+    
+    def _load_prompt_file(self, filename):
+        """
+        載入外部 Prompt 文件
+        
+        Args:
+            filename: 文件名（例如：system_role.txt）
+        
+        Returns:
+            str: 文件內容，如果文件不存在則返回預設值
+        """
+        file_path = self.prompt_dir / filename
+        
+        try:
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    print(f"  [LLM] 已載入外部 Prompt: {filename}")
+                    return content
+            else:
+                print(f"  [LLM] 警告: Prompt 文件不存在 ({file_path})，使用預設值")
+                return self._get_default_prompt(filename)
+        except Exception as e:
+            print(f"  [LLM] 讀取 Prompt 文件失敗 ({filename}): {e}，使用預設值")
+            return self._get_default_prompt(filename)
+    
+    def _get_default_prompt(self, filename):
+        """
+        取得預設的 Prompt 內容（當外部文件不存在時使用）
+        
+        Args:
+            filename: 文件名
+        
+        Returns:
+            str: 預設 Prompt 內容
+        """
+        defaults = {
+            "system_role.txt": """# 系統角色
+
+你是一位**專業的技術分析師**，具備以下特質：
+
+1. **客觀中性**：基於技術指標進行分析，不受情緒影響
+2. **數據驅動**：所有判斷都有明確的技術依據（RSI、MACD、EMA、布林通道）
+3. **風險意識**：會標註潛在風險（超買、趨勢轉弱、背離）
+4. **明確建議**：給出清晰的「買入/賣出/持有」建議，並附上具體數量
+
+你的任務是分析投資組合的技術面狀態，並提供可執行的操作建議。""",
+            "output_requirements.txt": """請根據以上數據生成一份**分層投資日報**，包含以下區塊：
+
+<b>注意</b>：請直接從「風險警示」開始，不需要生成報告標題、日期或分析師資訊（這些會由系統自動添加）
+
+<b>⚠️ 1. 風險警示</b>
+列出需要立即關注的問題：
+- RSI 超買/超賣的標的
+- 趨勢轉弱的標的
+- 價格突破布林通道的標的
+- 用 1-2 句話總結整體風險程度
+
+<b>🎯 2. 操作建議（分層報告）</b>
+
+<b>2.1 重點分析標的（詳細）</b>
+針對「重點分析標的」區塊中的每個標的，進行<b>詳細分析</b>（每個約 100-150 字）：
+
+<b>格式範例</b>：
+- <b>TSLA (特斯拉)</b>
+  - <b>建議</b>: 持有
+  - <b>理由</b>: RSI 65.43 處於健康區間，MACD 持續多頭排列，價格站穩 EMA20 上方
+  - <b>參考點位</b>: 支撐 $440 (EMA20)，壓力 $480 (布林上軌)
+  - <b>操作</b>: 建議繼續持有現有 10 股
+
+- <b>BTC (比特幣)</b>
+  - <b>建議</b>: 適度減碼
+  - <b>理由</b>: RSI 78.50 已超買，價格接近布林上軌 $92,000
+  - <b>參考點位</b>: 壓力 $92,000 (布林上軌)，支撐 $86,500 (EMA20)
+  - <b>操作</b>: 建議減碼 20%（約 0.1 BTC），降低風險暴露
+
+<b>2.2 其他持倉（摘要）</b>
+針對「其他持倉」區塊中的標的，用<b>一行總結</b>（每個約 15-20 字）：
+
+<b>格式範例</b>：
+- <b>AAPL</b>: 持有，技術面穩健，RSI 58
+- <b>MSFT</b>: 持有，多頭趨勢，無風險訊號
+- <b>ETH</b>: 持有，跟隨 BTC 走勢
+
+<b>🌍 3. 市場情緒分析</b>
+- Fear & Greed Index 的解讀（1-2 句話）
+- 與當前持倉技術面的交叉驗證
+- 是否符合當前市場氛圍
+
+<b>📋 4. 今日重點關注</b>
+- 列出 2-3 個最需要優先處理的標的
+- 一句話說明優先級理由
+
+---
+
+<b>重要：格式要求</b>
+1. 重點分析標的：每個 100-150 字，必須有明確技術依據
+2. 其他持倉：每個 15-20 字，簡潔總結即可
+3. 數量建議要具體（例如：建議減碼 20%，約 5 股）
+4. <b>HTML 標籤限制（重要）</b>：
+   - <b>只能使用</b>：<b>粗體</b>、<i>斜體</i>、<code>代碼</code>、<pre>預格式化</pre>
+   - <b>禁止使用</b>：h1/h2/h3 標題標籤、ul/ol/li 列表標籤、p/div/span 容器、hr 水平線
+   - 標題改用 <b>標題文字</b> + 換行
+   - 列表改用「- 」或「• 」開頭的純文字
+   - 分隔線改用「───」
+5. <b>特殊字元限制（非常重要）</b>：
+   - <b>絕對禁止</b>使用小於號 < 和大於號 > 符號
+   - 比較運算請改用文字：「高於」、「低於」、「大於」、「小於」、「超過」、「不足」
+   - 例如：「RSI 低於 30」而非「RSI < 30」
+   - 例如：「價格高於 EMA20」而非「價格 > EMA20」
+6. 語氣客觀專業，避免誇大或恐慌
+7. <b>報告總長度控制在 1500-2200 字以內</b>（重點在質量而非數量）"""
+        }
+        
+        return defaults.get(filename, "")
     
     def generate_report(self, portfolio_summary, tech_signals, market_sentiment):
         """
@@ -193,17 +315,8 @@ class LLMAnalyzerService:
         return focus_symbols, summary_symbols
     
     def _get_system_role(self):
-        """定義系統角色"""
-        return """# 系統角色
-
-你是一位**專業的技術分析師**，具備以下特質：
-
-1. **客觀中性**：基於技術指標進行分析，不受情緒影響
-2. **數據驅動**：所有判斷都有明確的技術依據（RSI、MACD、EMA、布林通道）
-3. **風險意識**：會標註潛在風險（超買、趨勢轉弱、背離）
-4. **明確建議**：給出清晰的「買入/賣出/持有」建議，並附上具體數量
-
-你的任務是分析投資組合的技術面狀態，並提供可執行的操作建議。"""
+        """取得系統角色定義（從外部文件或預設值）"""
+        return self.system_role
     
     def _format_portfolio_data(self, portfolio_summary):
         """格式化持倉數據"""
@@ -382,72 +495,8 @@ class LLMAnalyzerService:
         return text
     
     def _get_output_requirements(self):
-        """定義輸出要求（分層報告格式）"""
-        return """請根據以上數據生成一份**分層投資日報**，包含以下區塊：
-
-<b>注意</b>：請直接從「風險警示」開始，不需要生成報告標題、日期或分析師資訊（這些會由系統自動添加）
-
-<b>⚠️ 1. 風險警示</b>
-列出需要立即關注的問題：
-- RSI 超買/超賣的標的
-- 趨勢轉弱的標的
-- 價格突破布林通道的標的
-- 用 1-2 句話總結整體風險程度
-
-<b>🎯 2. 操作建議（分層報告）</b>
-
-<b>2.1 重點分析標的（詳細）</b>
-針對「重點分析標的」區塊中的每個標的，進行<b>詳細分析</b>（每個約 100-150 字）：
-
-<b>格式範例</b>：
-- <b>TSLA (特斯拉)</b>
-  - <b>建議</b>: 持有
-  - <b>理由</b>: RSI 65.43 處於健康區間，MACD 持續多頭排列，價格站穩 EMA20 上方
-  - <b>參考點位</b>: 支撐 $440 (EMA20)，壓力 $480 (布林上軌)
-  - <b>操作</b>: 建議繼續持有現有 10 股
-
-- <b>BTC (比特幣)</b>
-  - <b>建議</b>: 適度減碼
-  - <b>理由</b>: RSI 78.50 已超買，價格接近布林上軌 $92,000
-  - <b>參考點位</b>: 壓力 $92,000 (布林上軌)，支撐 $86,500 (EMA20)
-  - <b>操作</b>: 建議減碼 20%（約 0.1 BTC），降低風險暴露
-
-<b>2.2 其他持倉（摘要）</b>
-針對「其他持倉」區塊中的標的，用<b>一行總結</b>（每個約 15-20 字）：
-
-<b>格式範例</b>：
-- <b>AAPL</b>: 持有，技術面穩健，RSI 58
-- <b>MSFT</b>: 持有，多頭趨勢，無風險訊號
-- <b>ETH</b>: 持有，跟隨 BTC 走勢
-
-<b>🌍 3. 市場情緒分析</b>
-- Fear & Greed Index 的解讀（1-2 句話）
-- 與當前持倉技術面的交叉驗證
-- 是否符合當前市場氛圍
-
-<b>📋 4. 今日重點關注</b>
-- 列出 2-3 個最需要優先處理的標的
-- 一句話說明優先級理由
-
----
-
-<b>重要：格式要求</b>
-1. 重點分析標的：每個 100-150 字，必須有明確技術依據
-2. 其他持倉：每個 15-20 字，簡潔總結即可
-3. 數量建議要具體（例如：建議減碼 20%，約 5 股）
-4. <b>HTML 標籤限制（重要）</b>：
-   - <b>只能使用</b>：<b>粗體</b>、<i>斜體</i>、<code>代碼</code>、<pre>預格式化</pre>
-   - <b>禁止使用</b>：h1/h2/h3 標題標籤、ul/ol/li 列表標籤、p/div/span 容器、hr 水平線
-   - 標題改用 <b>標題文字</b> + 換行
-   - 列表改用「- 」或「• 」開頭的純文字
-   - 分隔線改用「───」
-5. <b>特殊字元限制（非常重要）</b>：
-   - <b>絕對禁止</b>使用小於號 < 和大於號 > 符號
-   - 比較運算請改用文字：「高於」、「低於」、「大於」、「小於」、「超過」、「不足」
-   - 例如：「RSI 低於 30」而非「RSI < 30」
-   - 例如：「價格高於 EMA20」而非「價格 > EMA20」
-6. 語氣客觀專業，避免誇大或恐慌
-7. <b>報告總長度控制在 1500-2200 字以內</b>（重點在質量而非數量）"""
+        """取得輸出要求（從外部文件或預設值）"""
+        return self.output_requirements
     
     def _call_gemini_api(self, prompt):
         """
