@@ -98,4 +98,9 @@ class Config:
     
     # 最多詳細分析的標的數量（避免 token 超標）
     ANALYSIS_MAX_FOCUS = 6
+    
+    # 最小市值佔比閾值（例如 0.01 = 1%）
+    # 市值佔比低於此值的標的，不會出現在詳細分析或簡要總結中
+    # 但 Watchlist 和風險警示標的不受此限制（即使佔比很小也會分析）
+    ANALYSIS_MIN_PERCENTAGE = 0.01  # 1%
 

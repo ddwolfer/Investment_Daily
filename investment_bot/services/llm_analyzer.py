@@ -249,9 +249,10 @@ class LLMAnalyzerService:
         智能篩選需要重點分析的標的
         
         優先級：
-        1. Watchlist（手動指定的核心標的）
-        2. 風險警示（自動識別有問題的標的）
-        3. 限制數量（避免 token 超標）
+        1. Watchlist（手動指定的核心標的）- 不受市值限制
+        2. 風險警示（自動識別有問題的標的）- 不受市值限制
+        3. 市值佔比過濾（低於閾值的標的直接忽略）
+        4. 限制數量（避免 token 超標）
         
         Args:
             portfolio_summary: 持倉摘要
@@ -263,10 +264,31 @@ class LLMAnalyzerService:
         focus_symbols = []
         summary_symbols = []
         
-        # 獲取跳過清單
+        # 獲取配置
         skip_list = getattr(Config, 'ANALYSIS_SKIP_LIST', [])
+        min_percentage = getattr(Config, 'ANALYSIS_MIN_PERCENTAGE', 0.01)  # 預設 1%
+        total_value = portfolio_summary.get('total_value', 0)
         
-        # 第 1 層：Watchlist（優先）
+        # 建立市值映射（方便查詢）
+        asset_value_map = {}
+        for asset in portfolio_summary.get('assets', []):
+            symbol = asset.get('symbol')
+            market_value = asset.get('market_value', 0)
+            if symbol:
+                asset_value_map[symbol] = market_value
+        
+        # 輔助函數：檢查市值佔比
+        def is_above_threshold(symbol):
+            """檢查標的是否超過最小市值佔比（Watchlist 和風險警示不受限制）"""
+            if symbol in Config.ANALYSIS_WATCHLIST:
+                return True  # Watchlist 不受限制
+            if total_value <= 0:
+                return True  # 避免除以零
+            market_value = asset_value_map.get(symbol, 0)
+            percentage = market_value / total_value
+            return percentage >= min_percentage
+        
+        # 第 1 層：Watchlist（優先，不受市值限制）
         for symbol in Config.ANALYSIS_WATCHLIST:
             if symbol in skip_list:
                 continue  # 跳過黑名單標的
@@ -274,7 +296,7 @@ class LLMAnalyzerService:
                 focus_symbols.append(symbol)
                 print(f"  [LLM] Watchlist 核心標的: {symbol}")
         
-        # 第 2 層：風險警示自動篩選
+        # 第 2 層：風險警示自動篩選（不受市值限制）
         for symbol, signals in tech_signals.items():
             if symbol in focus_symbols or symbol in skip_list:
                 continue  # 已在 watchlist 中或在跳過清單中
@@ -308,10 +330,18 @@ class LLMAnalyzerService:
             print(f"  [LLM] 重點標的過多 ({len(focus_symbols)} 個)，限制為前 {Config.ANALYSIS_MAX_FOCUS} 個")
             focus_symbols = focus_symbols[:Config.ANALYSIS_MAX_FOCUS]
         
-        # 第 3 層：其他標的進入簡要總結
+        # 第 3 層：其他標的進入簡要總結（需通過市值佔比檢查）
         for symbol in tech_signals.keys():
-            if symbol not in focus_symbols and symbol not in skip_list:
+            if symbol in focus_symbols or symbol in skip_list:
+                continue
+            
+            # 檢查市值佔比
+            if is_above_threshold(symbol):
                 summary_symbols.append(symbol)
+            else:
+                market_value = asset_value_map.get(symbol, 0)
+                percentage = (market_value / total_value * 100) if total_value > 0 else 0
+                print(f"  [LLM] 跳過小額標的: {symbol} (市值 ${market_value:,.2f}, 佔比 {percentage:.2f}% < {min_percentage*100}%)")
         
         print(f"  [LLM] 📊 重點分析標的 ({len(focus_symbols)} 個): {focus_symbols}")
         if summary_symbols:
