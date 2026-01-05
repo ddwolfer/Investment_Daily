@@ -48,10 +48,25 @@ class TelegramBotService:
         else:
             try:
                 self.bot = Bot(token=self.token)
-                if self.topic_id:
-                    print(f"  [Telegram] Bot 初始化成功 (Chat ID: {self.chat_id}, Topic ID: {self.topic_id})")
+                
+                # 輸出除錯資訊（不洩露完整 ID）
+                chat_id_str = str(self.chat_id)
+                if len(chat_id_str) > 8:
+                    masked_chat_id = chat_id_str[:4] + "..." + chat_id_str[-4:]
                 else:
-                    print(f"  [Telegram] Bot 初始化成功 (Chat ID: {self.chat_id})")
+                    masked_chat_id = "***"
+                
+                chat_id_type = type(self.chat_id).__name__
+                
+                if self.topic_id:
+                    print(f"  [Telegram] Bot 初始化成功")
+                    print(f"    - Chat ID 類型: {chat_id_type}")
+                    print(f"    - Chat ID (部分): {masked_chat_id}")
+                    print(f"    - Topic ID: {self.topic_id}")
+                else:
+                    print(f"  [Telegram] Bot 初始化成功")
+                    print(f"    - Chat ID 類型: {chat_id_type}")
+                    print(f"    - Chat ID (部分): {masked_chat_id}")
             except Exception as e:
                 print(f"  [Telegram] Bot 初始化失敗: {e}")
     
@@ -289,6 +304,58 @@ class TelegramBotService:
             print(f"  [Telegram] 推送失敗: {e}")
             return False
     
+    async def _verify_chat_access(self):
+        """
+        驗證 Bot 是否可以存取指定的 Chat
+        
+        Returns:
+            tuple: (success: bool, chat_info: dict or None, error_msg: str or None)
+        """
+        if not self.bot or not self.chat_id:
+            return False, None, "Bot 或 Chat ID 未初始化"
+        
+        try:
+            # 嘗試獲取 Chat 資訊來驗證存取權限
+            chat = await self.bot.get_chat(self.chat_id)
+            
+            chat_info = {
+                "id": chat.id,
+                "type": chat.type,
+                "title": getattr(chat, 'title', None) or getattr(chat, 'first_name', 'N/A'),
+            }
+            
+            # 輸出除錯資訊（不洩露完整 ID）
+            chat_id_str = str(self.chat_id)
+            if len(chat_id_str) > 8:
+                masked_id = chat_id_str[:4] + "..." + chat_id_str[-4:]
+            else:
+                masked_id = "***"
+            
+            print(f"  [Telegram] ✅ Chat 驗證成功:")
+            print(f"    - Chat ID 類型: {type(self.chat_id).__name__}")
+            print(f"    - Chat ID (部分): {masked_id}")
+            print(f"    - Chat 類型: {chat_info['type']}")
+            print(f"    - Chat 名稱: {chat_info['title']}")
+            
+            if self.topic_id:
+                print(f"    - Topic ID: {self.topic_id}")
+            
+            return True, chat_info, None
+            
+        except TelegramError as e:
+            error_msg = str(e)
+            # 提供更具體的錯誤訊息
+            if "chat not found" in error_msg.lower():
+                return False, None, f"Chat 不存在或 Bot 未加入該 Chat (Chat ID: {type(self.chat_id).__name__})"
+            elif "unauthorized" in error_msg.lower():
+                return False, None, "Bot 未授權存取該 Chat"
+            elif "forbidden" in error_msg.lower():
+                return False, None, "Bot 沒有權限存取該 Chat（可能是群組權限設定問題）"
+            else:
+                return False, None, f"Chat 驗證失敗: {error_msg}"
+        except Exception as e:
+            return False, None, f"Chat 驗證時發生未預期錯誤: {e}"
+    
     async def _send_message_async(self, text):
         """
         異步發送訊息到 Telegram
@@ -303,6 +370,23 @@ class TelegramBotService:
         if len(text) > 4096:
             print(f"  [Telegram] 警告: 訊息過長 ({len(text)} 字元)，將分段發送")
             return await self._send_long_message(text)
+        
+        # 在發送前驗證 Chat 存取權限
+        print(f"  [Telegram] 正在驗證 Chat 存取權限...")
+        can_access, chat_info, error_msg = await self._verify_chat_access()
+        
+        if not can_access:
+            print(f"  [Telegram] ❌ Chat 驗證失敗: {error_msg}")
+            print(f"  [Telegram] 除錯資訊:")
+            print(f"    - Chat ID 類型: {type(self.chat_id).__name__}")
+            print(f"    - Chat ID 值: {self.chat_id}")
+            print(f"    - Topic ID: {self.topic_id if self.topic_id else '未設定'}")
+            print(f"  [Telegram] 建議檢查:")
+            print(f"    1. Bot 是否已加入該群組/頻道")
+            print(f"    2. Chat ID 是否正確（群組 ID 通常是負數）")
+            print(f"    3. 如果使用群組 Topic，Topic ID 是否正確")
+            print(f"    4. Bot 是否有發送訊息的權限")
+            return False
         
         # 嘗試發送訊息（帶重試機制）
         max_retries = 3
@@ -323,6 +407,7 @@ class TelegramBotService:
                 # topic_id 已在 __init__ 中轉換為 int，這裡直接使用
                 if self.topic_id:
                     send_params["message_thread_id"] = self.topic_id
+                    print(f"  [Telegram] 使用 Topic ID: {self.topic_id}")
                 
                 message = await self.bot.send_message(**send_params)
                 
@@ -349,15 +434,28 @@ class TelegramBotService:
                     return False
                     
             except TelegramError as e:
-                # Telegram API 錯誤（通常是格式問題）
-                print(f"  [Telegram] ❌ Telegram API 錯誤: {e}")
+                # Telegram API 錯誤（通常是格式問題或權限問題）
+                error_str = str(e)
+                print(f"  [Telegram] ❌ Telegram API 錯誤: {error_str}")
                 
-                # 如果是 Markdown 格式錯誤，嘗試用純文字發送
-                if "can't parse" in str(e).lower() or "markdown" in str(e).lower():
-                    print(f"  [Telegram] 嘗試使用純文字模式發送...")
+                # 提供更具體的錯誤診斷
+                if "chat not found" in error_str.lower():
+                    print(f"  [Telegram] 錯誤診斷: Chat 不存在或 Bot 未加入")
+                    print(f"    - 請確認 Bot 已加入該群組/頻道")
+                    print(f"    - 請確認 Chat ID 正確（群組 ID 通常是負數，例如：-1001234567890）")
+                    if self.topic_id:
+                        print(f"    - 請確認 Topic ID ({self.topic_id}) 正確")
+                elif "forbidden" in error_str.lower() or "not enough rights" in error_str.lower():
+                    print(f"  [Telegram] 錯誤診斷: Bot 沒有權限")
+                    print(f"    - 請確認 Bot 有發送訊息的權限")
+                    print(f"    - 如果是群組，請確認 Bot 是管理員或有發送訊息權限")
+                elif "can't parse" in error_str.lower() or "markdown" in error_str.lower() or "html" in error_str.lower():
+                    print(f"  [Telegram] 錯誤診斷: 訊息格式錯誤，嘗試使用純文字模式...")
                     return await self._send_as_plain_text(text)
                 else:
-                    return False
+                    print(f"  [Telegram] 錯誤診斷: 未知錯誤，請檢查 Telegram API 文檔")
+                
+                return False
                     
             except Exception as e:
                 print(f"  [Telegram] ❌ 未預期的錯誤: {e}")
