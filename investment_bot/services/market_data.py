@@ -1,12 +1,13 @@
 ﻿# -*- coding: utf-8 -*-
 """
 市場數據服務 (Market Data Service)
-負責從 Yahoo Finance 與 Binance (via ccxt) 獲取實時行情與歷史 K 線數據。
+負責從 Yahoo Finance 與 CoinGecko API 獲取實時行情與歷史 K 線數據。
 整合 DataStore 實現快取優先策略。
+
+注意：已改用 CoinGecko API 替代 Binance，避免 GitHub Actions 地區限制問題。
 """
 
 import yfinance as yf
-import ccxt
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -16,8 +17,8 @@ from ..utils.data_store import DataStore
 class MarketDataService:
     def __init__(self):
         """初始化市場數據服務"""
-        self.exchange = ccxt.binance()
         self.store = DataStore()
+        # 不再使用 ccxt.binance()，改用 CoinGecko API
         
     def get_historical_data(self, symbol, asset_type, days=200):
         """
@@ -73,26 +74,88 @@ class MarketDataService:
         return df
 
     def _get_crypto_history(self, symbol, days):
-        """使用 ccxt 獲取加密貨幣歷史數據"""
-        # Mapping: BTC -> BTC/USDT
-        pair = Config.CRYPTO_MAPPING.get(symbol, f"{symbol}/USDT")
+        """
+        使用 CoinGecko API 獲取加密貨幣歷史數據（替代 Binance，避免地區限制）
+        
+        CoinGecko API 優點：
+        - 無地區限制（適合 GitHub Actions）
+        - 免費額度充足（50 calls/minute）
+        - API 穩定可靠
+        """
+        # CoinGecko 的 symbol 映射（CoinGecko 使用 coin ID 而非 symbol）
+        coingecko_id_map = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "SOL": "solana",
+            "BNB": "binancecoin",
+            "WLD": "worldcoin-wld",
+            "LINK": "chainlink",
+            "BGB": "bitget-token",
+            # 可以根據需要擴充更多映射
+        }
+        
+        coingecko_id = coingecko_id_map.get(symbol)
+        
+        if not coingecko_id:
+            # 如果找不到映射，嘗試使用 symbol 的小寫（CoinGecko 可能支援）
+            coingecko_id = symbol.lower()
+            print(f"  [MarketData] 警告: {symbol} 未在 CoinGecko 映射表中，嘗試使用 {coingecko_id}")
         
         try:
-            # fetch_ohlcv (symbol, timeframe, since, limit)
-            # 每日線 '1d'
-            # limit 預設 500, 我們需要 200 + buffer
-            ohlcv = self.exchange.fetch_ohlcv(pair, '1d', limit=days + 100)
+            # CoinGecko API: 獲取歷史價格數據
+            # 文檔：https://www.coingecko.com/api/documentations/v3
+            url = f"https://api.coingecko.com/api/v3/coins/{coingecko_id}/market_chart"
+            params = {
+                "vs_currency": "usd",
+                "days": min(days, 365),  # CoinGecko 免費版最多 365 天
+                "interval": "daily"
+            }
+            
+            print(f"  [MarketData] 正在從 CoinGecko 獲取 {symbol} 數據...")
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            # 解析價格數據
+            prices = data.get('prices', [])
+            if not prices:
+                print(f"  [MarketData] 警告: CoinGecko 未返回 {symbol} 的價格數據")
+                return pd.DataFrame()
             
             # 轉換為 DataFrame
-            df = pd.DataFrame(ohlcv, columns=['Timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
+            df = pd.DataFrame(prices, columns=['Timestamp', 'Close'])
             df['Date'] = pd.to_datetime(df['Timestamp'], unit='ms')
             df.set_index('Date', inplace=True)
-            df.drop(columns=['Timestamp'], inplace=True)
             
+            # CoinGecko 的 market_chart 只提供價格，不提供完整的 OHLCV
+            # 為了技術分析需要，我們使用 Close 價格作為 Open, High, Low（簡化處理）
+            # 這對於 EMA, RSI, MACD 等指標計算影響不大
+            df['Open'] = df['Close']
+            df['High'] = df['Close']
+            df['Low'] = df['Close']
+            df['Volume'] = 0  # CoinGecko market_chart 不提供 Volume
+            
+            # 重新排列欄位順序（符合標準 OHLCV 格式）
+            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+            df.drop(columns=['Timestamp'], inplace=True, errors='ignore')
+            
+            # 確保數據按日期排序（從舊到新）
+            df = df.sort_index()
+            
+            print(f"  [MarketData] ✅ 成功獲取 {symbol} 數據 ({len(df)} 筆)")
             return df
             
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"  [MarketData] ❌ CoinGecko 找不到 {symbol} (ID: {coingecko_id})，請檢查映射表")
+            else:
+                print(f"  [MarketData] ❌ CoinGecko API 錯誤 ({e.response.status_code}): {e}")
+            return pd.DataFrame()
+        except requests.exceptions.RequestException as e:
+            print(f"  [MarketData] ❌ CoinGecko 網路錯誤: {e}")
+            return pd.DataFrame()
         except Exception as e:
-            print(f"ccxt 下載錯誤 {pair}: {e}")
+            print(f"  [MarketData] ❌ CoinGecko 下載錯誤 {symbol}: {e}")
             return pd.DataFrame()
 
     def get_market_sentiment(self):

@@ -35,8 +35,9 @@ class Config:
         GOOGLE_SHEET_ID_STOCK = os.getenv("GOOGLE_SHEET_ID")
 
     # --- Ticker Mapping (將 Sheet 中的名稱映射到 API 所需的 Symbol) ---
-    # Crypto: 使用 Binance 格式 (e.g., BTC/USDT)
-    # 注意：這裡需要根據使用者的實際 Google Sheet 內容進行擴充
+    # Crypto: 已改用 CoinGecko API（不再使用 Binance）
+    # 注意：CoinGecko 使用 coin ID 而非 symbol，映射在 market_data.py 中處理
+    # 此處保留 CRYPTO_MAPPING 以保持向後兼容（未來可能用於其他用途）
     CRYPTO_MAPPING = {
         "BTC": "BTC/USDT",
         "ETH": "ETH/USDT",

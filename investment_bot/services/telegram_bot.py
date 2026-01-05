@@ -14,8 +14,31 @@ class TelegramBotService:
     def __init__(self):
         """初始化 Telegram Bot 服務"""
         self.token = Config.TELEGRAM_BOT_TOKEN
-        self.chat_id = Config.TELEGRAM_CHAT_ID
-        self.topic_id = Config.TELEGRAM_TOPIC_ID  # 群組 Topic ID (可選)
+        
+        # 改進 Chat ID 處理：確保正確轉換為 int 或 str
+        # Telegram API 接受 int（私人對話/群組 ID）或 str（頻道 username）
+        chat_id_raw = Config.TELEGRAM_CHAT_ID
+        if chat_id_raw:
+            try:
+                # 嘗試轉換為整數（群組 ID 可能是負數，例如：-1001234567890）
+                self.chat_id = int(chat_id_raw)
+            except (ValueError, TypeError):
+                # 如果無法轉換，使用字串（例如：@channel_username）
+                self.chat_id = str(chat_id_raw)
+        else:
+            self.chat_id = None
+        
+        # 改進 Topic ID 處理：確保正確轉換為 int
+        topic_id_raw = Config.TELEGRAM_TOPIC_ID
+        if topic_id_raw:
+            try:
+                self.topic_id = int(topic_id_raw)
+            except (ValueError, TypeError):
+                print(f"  [Telegram] 警告: TELEGRAM_TOPIC_ID 格式錯誤 ({topic_id_raw})，將忽略")
+                self.topic_id = None
+        else:
+            self.topic_id = None
+        
         self.bot = None
         
         if not self.token:
@@ -26,9 +49,9 @@ class TelegramBotService:
             try:
                 self.bot = Bot(token=self.token)
                 if self.topic_id:
-                    print(f"  [Telegram] Bot 初始化成功 (Topic ID: {self.topic_id})")
+                    print(f"  [Telegram] Bot 初始化成功 (Chat ID: {self.chat_id}, Topic ID: {self.topic_id})")
                 else:
-                    print(f"  [Telegram] Bot 初始化成功")
+                    print(f"  [Telegram] Bot 初始化成功 (Chat ID: {self.chat_id})")
             except Exception as e:
                 print(f"  [Telegram] Bot 初始化失敗: {e}")
     
@@ -297,8 +320,9 @@ class TelegramBotService:
                 }
                 
                 # 加入 topic ID（如果有設定）
+                # topic_id 已在 __init__ 中轉換為 int，這裡直接使用
                 if self.topic_id:
-                    send_params["message_thread_id"] = int(self.topic_id)
+                    send_params["message_thread_id"] = self.topic_id
                 
                 message = await self.bot.send_message(**send_params)
                 
@@ -407,8 +431,9 @@ class TelegramBotService:
             }
             
             # 加入 topic ID（如果有設定）
+            # topic_id 已在 __init__ 中轉換為 int，這裡直接使用
             if self.topic_id:
-                send_params["message_thread_id"] = int(self.topic_id)
+                send_params["message_thread_id"] = self.topic_id
             
             message = await self.bot.send_message(**send_params)
             

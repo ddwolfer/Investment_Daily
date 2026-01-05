@@ -206,5 +206,58 @@
     *   指令：`cd D:\AI\Investment_Daily; $env:PYTHONUTF8=1; uv run python test_script/test_xxx.py`
     *   *學習點*：編寫終端機指令時，需注意目前使用的 Shell 類型（PowerShell vs Bash）。在 Cursor 的預設 Windows 終端機通常是 PowerShell。
 
+### 11. Binance API 451 錯誤（地區限制）與 Telegram "Chat not found" 錯誤
+
+*   **錯誤訊息 (Error Message)**:
+    1. Binance API 錯誤：
+    ```text
+    ccxt 下載錯誤 BTC/USDT: binance GET https://api.binance.com/api/v3/exchangeInfo 451
+    "code": 0,
+    "msg": "Service unavailable from a restricted location according to 'b. Eligibility' in https://www.binance.com/en/terms. Please contact customer service if you believe you received this message in error."
+    ```
+    2. Telegram API 錯誤：
+    ```text
+    [Telegram] ❌ Telegram API 錯誤: Chat not found
+    ```
+    發生在 GitHub Actions 執行時。
+
+*   **根本原因 (Root Cause)**:
+    1. **Binance 地區限制**：
+        *   GitHub Actions 的 runner 位於美國等 Binance 限制的地區。
+        *   Binance 對某些地區的 IP 有嚴格限制，返回 451 錯誤碼（地區限制）。
+        *   這導致所有加密貨幣數據無法獲取（BTC, ETH, SOL, BNB, WLD 等）。
+    
+    2. **Telegram Chat ID 格式問題**：
+        *   環境變數 `TELEGRAM_CHAT_ID` 從 GitHub Secrets 讀取時可能是字串格式。
+        *   Telegram API 需要 `chat_id` 為整數（私人對話/群組）或字串（頻道 username）。
+        *   如果 `chat_id` 是字串格式的數字（例如 `"123456789"`），需要正確轉換為 `int`。
+        *   群組 ID 通常是負數（例如 `-1001234567890`），需要特別處理。
+        *   `TELEGRAM_TOPIC_ID` 也需要正確轉換為整數。
+
+*   **解決方案 (Solution)**:
+    1. **改用 CoinGecko API 替代 Binance**：
+        *   CoinGecko API 無地區限制，適合 GitHub Actions 環境。
+        *   免費額度充足（50 calls/minute），API 穩定可靠。
+        *   修改 `market_data.py` 的 `_get_crypto_history` 方法：
+            *   移除 `ccxt.binance()` 依賴。
+            *   實作 CoinGecko API 調用邏輯。
+            *   建立 CoinGecko coin ID 映射表（例如：BTC -> "bitcoin"）。
+            *   處理 CoinGecko 返回的數據格式（只提供價格，需模擬 OHLCV）。
+        *   注意：CoinGecko 的 `market_chart` API 只提供價格數據，不提供完整的 OHLCV，因此使用 Close 價格作為 Open/High/Low（對技術指標計算影響不大）。
+    
+    2. **改進 Telegram Chat ID 處理**：
+        *   在 `telegram_bot.py` 的 `__init__` 方法中改進 ID 轉換邏輯：
+            *   `chat_id`：嘗試轉換為 `int`，失敗則使用 `str`（支援頻道 username）。
+            *   `topic_id`：強制轉換為 `int`，失敗則設為 `None` 並顯示警告。
+        *   在發送訊息時，直接使用已轉換的 `self.chat_id` 和 `self.topic_id`，避免重複轉換。
+        *   改進錯誤日誌輸出，顯示實際使用的 Chat ID 和 Topic ID，方便除錯。
+
+*   **學習點 (Learning Points)**:
+    1. **API 地區限制**：使用第三方 API 時，需考慮部署環境的地區限制。GitHub Actions runner 位於特定地區，可能無法存取某些服務。
+    2. **備用數據源**：對於關鍵功能（如市場數據），應準備備用數據源（如 CoinGecko、CryptoCompare）以應對主要 API 失效。
+    3. **環境變數類型轉換**：從環境變數讀取的數值通常是字串，需要根據 API 要求進行適當的類型轉換。
+    4. **Telegram API 規範**：Telegram Bot API 對 `chat_id` 的格式有嚴格要求，群組 ID 是負數，頻道可以是負數或 username 字串。
+    5. **錯誤處理與日誌**：改進錯誤日誌輸出，顯示實際使用的參數值，有助於快速定位問題。
+
 ---
 *持續更新中...*
