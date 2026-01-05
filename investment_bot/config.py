@@ -11,8 +11,10 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)  # 往上一層
 env_path = os.path.join(project_root, '.env')
 
-# 載入
-load_dotenv(env_path)
+# 只在 .env 檔案存在時才載入（避免在 GitHub Actions 等環境中產生警告）
+# 在 GitHub Actions 中，環境變數會直接透過 Secrets 設定，不需要 .env 檔案
+if os.path.exists(env_path):
+    load_dotenv(env_path)
 
 class Config:
     # --- API Keys ---

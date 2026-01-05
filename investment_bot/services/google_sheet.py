@@ -8,6 +8,7 @@ Google Sheet 服務 (Google Sheet Service)
 import os
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from ..config import Config
@@ -16,7 +17,16 @@ from ..utils.data_store import DataStore
 class GoogleSheetService:
     def __init__(self):
         """初始化 Google Sheet 服務（支援雙來源：美股 + 加密貨幣）"""
-        self.creds_file = Config.GOOGLE_CREDENTIALS_FILE
+        # 解析 credentials.json 路徑（支援相對路徑和絕對路徑）
+        creds_file = Config.GOOGLE_CREDENTIALS_FILE
+        if os.path.isabs(creds_file):
+            # 如果是絕對路徑，直接使用
+            self.creds_file = creds_file
+        else:
+            # 如果是相對路徑，轉換為相對於專案根目錄的絕對路徑
+            # 這樣在 GitHub Actions 等環境中也能正確找到檔案
+            current_dir = Path(__file__).parent.parent.parent  # investment_bot/services -> investment_bot -> 專案根目錄
+            self.creds_file = str(current_dir / creds_file)
         self.stock_sheet_id = Config.GOOGLE_SHEET_ID_STOCK
         self.crypto_sheet_id = Config.GOOGLE_SHEET_ID_CRYPTO
         self.scopes = ['https://www.googleapis.com/auth/spreadsheets.readonly']
