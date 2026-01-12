@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 LLM 分析服務 (LLM Analyzer Service)
 負責整合 Prompt 並呼叫 LLM 生成投資報告
@@ -166,23 +166,52 @@ class LLMAnalyzerService:
             print("  [LLM] 錯誤: Gemini 服務未初始化")
             return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
         
-        # 組裝 Prompt
+        # 組裝 Prompt（只組裝一次）
         prompt = self._build_prompt(portfolio_summary, tech_signals, market_sentiment)
         
-        # 呼叫 API（帶重試機制）
-        try:
-            response = self._call_gemini_api(prompt)
-            
-            # 驗證回應格式
-            if response and self._validate_response(response):
-                return response
-            else:
-                print("  [LLM] 警告: 回應格式驗證失敗，使用備用報告")
-                return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
+        # 驗證失敗重試機制（最多 3 次）
+        max_validation_retries = 3
+        
+        for validation_attempt in range(max_validation_retries):
+            try:
+                # 呼叫 API（API 層級的重試機制由 _call_gemini_api 處理）
+                response = self._call_gemini_api(prompt)
                 
-        except Exception as e:
-            print(f"  [LLM] 錯誤: {e}")
-            return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
+                # 檢查 API 回應是否為空
+                if not response:
+                    if validation_attempt < max_validation_retries - 1:
+                        print(f"  [LLM] API 回應為空，將重新調用 API（嘗試 {validation_attempt + 1}/{max_validation_retries}）...")
+                        time.sleep(1)
+                        continue
+                    else:
+                        print(f"  [LLM] 警告: API 回應為空（已嘗試 {max_validation_retries} 次），使用備用報告")
+                        return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
+                
+                # 驗證回應格式
+                if self._validate_response(response):
+                    if validation_attempt > 0:
+                        print(f"  [LLM] ✅ 驗證成功（第 {validation_attempt + 1} 次嘗試）")
+                    return response
+                else:
+                    if validation_attempt < max_validation_retries - 1:
+                        print(f"  [LLM] 驗證失敗，將重新調用 API（嘗試 {validation_attempt + 1}/{max_validation_retries}）...")
+                        # 短暫延遲後重試
+                        time.sleep(1)
+                    else:
+                        print(f"  [LLM] 警告: 回應格式驗證失敗（已嘗試 {max_validation_retries} 次），使用備用報告")
+                        return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
+                    
+            except Exception as e:
+                print(f"  [LLM] 錯誤: {e}")
+                if validation_attempt < max_validation_retries - 1:
+                    print(f"  [LLM] 將重新嘗試（嘗試 {validation_attempt + 1}/{max_validation_retries}）...")
+                    time.sleep(1)
+                else:
+                    print(f"  [LLM] 已達最大重試次數，使用備用報告")
+                    return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
+        
+        # 理論上不會執行到這裡，但為了安全起見
+        return self._generate_fallback_report(portfolio_summary, tech_signals, market_sentiment)
     
     def _build_prompt(self, portfolio_summary, tech_signals, market_sentiment):
         """
