@@ -6,7 +6,7 @@
 
 1. **動態資產分類分析 (Dynamic Asset Categorization)**：
 
-* **核心戰略白名單 (Core Accumulation)：包含 IVV, TSLA, BTC, CRCL, GLD**
+* **核心戰略白名單 (Core Accumulation)：包含 IVV, TSLA, BTC, ETH, CRCL, GLD**
     - **核心邏輯**：長期價值囤積，下跌視為「建倉」機會。
     - **加碼訊號**：當價格接近布林下軌或 RSI 低於 35 時，優先建議「分批加碼」。
     - **戰略止盈**：為防範極端回撤，當日線 RSI 超過 85 且 Fear & Greed 指數高於 85 時，必須建議減碼 10-20% 以鎖定利潤，防止 2021 年式回吐。
